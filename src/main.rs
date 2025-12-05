@@ -13,6 +13,7 @@ use Discord_bot::service::automation::options_data;
 use Discord_bot::service::command::fundamentals as fundamentals_cmd;
 use Discord_bot::service::command::holders as holders_cmd;
 use Discord_bot::service::command::quotes as quotes_cmd;
+use Discord_bot::service::command::news as news_cmd;
 use Discord_bot::service::finance::FinanceService;
 use Discord_bot::models::StatementType;
 
@@ -37,6 +38,7 @@ impl EventHandler for Handler {
             let _ = guild_id.create_command(&ctx.http, fundamentals_cmd::register_command(StatementType::CashFlow)).await;
             let _ = guild_id.create_command(&ctx.http, quotes_cmd::register_command()).await;
             let _ = guild_id.create_command(&ctx.http, holders_cmd::register_command()).await;
+            let _ = guild_id.create_command(&ctx.http, news_cmd::register_command()).await;
             info!("{} is connected. Guild commands registered instantly for testing.", ready.user.name);
         } else {
             // Fallback to global commands (takes up to 1 hour)
@@ -46,6 +48,7 @@ impl EventHandler for Handler {
             let _ = Command::create_global_command(&ctx.http, fundamentals_cmd::register_command(StatementType::CashFlow)).await;
             let _ = Command::create_global_command(&ctx.http, quotes_cmd::register_command()).await;
             let _ = Command::create_global_command(&ctx.http, holders_cmd::register_command()).await;
+            let _ = Command::create_global_command(&ctx.http, news_cmd::register_command()).await;
             info!("{} is connected. Global commands registered (may take up to 1 hour).", ready.user.name);
         }
 
@@ -120,6 +123,26 @@ impl EventHandler for Handler {
             };
 
             let _ = command
+                        .edit_response(
+                            &ctx.http,
+                            serenity::all::EditInteractionResponse::new().content(content),
+                        )
+                        .await;
+                }
+                "news" => {
+                    let _ = command
+                        .create_response(
+                            &ctx.http,
+                            CreateInteractionResponse::Defer(Default::default()),
+                        )
+                        .await;
+
+                    let content = match news_cmd::handle(&command, &self.finance).await {
+                        Ok(msg) => msg,
+                        Err(err) => format!("❌ {}", err),
+                    };
+
+                    let _ = command
                         .edit_response(
                             &ctx.http,
                             serenity::all::EditInteractionResponse::new().content(content),

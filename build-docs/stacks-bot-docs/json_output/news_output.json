@@ -1,0 +1,314 @@
+{
+  "count": 13,
+  "explains": [],
+  "lists": [],
+  "nav": [],
+  "news": [
+    {
+      "link": "https://finance.yahoo.com/video/netflix-acquire-warner-bros-more-153827877.html",
+      "providerPublishTime": 1764949107,
+      "publisher": "Yahoo Finance Video",
+      "relatedTickers": [
+        "AAPL",
+        "WBD"
+      ],
+      "thumbnail": {
+        "resolutions": [
+          {
+            "height": 720,
+            "tag": "original",
+            "url": "https://s.yimg.com/uu/api/res/1.2/lUHKlBSj.CI8uutw1An0PQ--~B/aD03MjA7dz0xMjgwO2FwcGlkPXl0YWNoeW9u/https://cf-images.us-east-1.prod.boltdns.net/v1/jit/6415665815001/4a401c88-92df-49ed-b508-795b6c28db9e/main/1280x720/10m36s885ms/match/image.jpg",
+            "width": 1280
+          },
+          {
+            "height": 140,
+            "tag": "140x140",
+            "url": "https://s.yimg.com/uu/api/res/1.2/E6_WSY2IDoMTSRw3Zt9Edg--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://cf-images.us-east-1.prod.boltdns.net/v1/jit/6415665815001/4a401c88-92df-49ed-b508-795b6c28db9e/main/1280x720/10m36s885ms/match/image.jpg",
+            "width": 140
+          }
+        ]
+      },
+      "title": "Netflix to acquire Warner Bros., more executive departures at Apple",
+      "type": "VIDEO",
+      "uuid": "2b5e0b7e-4015-3334-be02-be96831eaf79"
+    },
+    {
+      "link": "https://finance.yahoo.com/news/apple-reaches-time-high-week-151055016.html",
+      "providerPublishTime": 1764948594,
+      "publisher": "GuruFocus.com",
+      "relatedTickers": [
+        "AAPL"
+      ],
+      "thumbnail": {
+        "resolutions": [
+          {
+            "height": 400,
+            "tag": "original",
+            "url": "https://s.yimg.com/uu/api/res/1.2/IcEDHtzDwTA4hQbvBfYYrg--~B/aD00MDA7dz00MDA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/us.finance.gurufocus/40a12a1b7769c635ead36fab47a12566",
+            "width": 400
+          },
+          {
+            "height": 140,
+            "tag": "140x140",
+            "url": "https://s.yimg.com/uu/api/res/1.2/vEdfVlwAwFQwSkiElMztoQ--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/us.finance.gurufocus/40a12a1b7769c635ead36fab47a12566",
+            "width": 140
+          }
+        ]
+      },
+      "title": "Apple Reaches All-Time High This Week -- Proves It's Still in AI Race",
+      "type": "STORY",
+      "uuid": "679cbc93-70ec-3711-92e1-e60cdcbcb3b8"
+    },
+    {
+      "link": "https://finance.yahoo.com/news/apple-warns-users-84-countries-151549613.html",
+      "providerPublishTime": 1764947749,
+      "publisher": "GuruFocus.com",
+      "relatedTickers": [
+        "AAPL"
+      ],
+      "thumbnail": {
+        "resolutions": [
+          {
+            "height": 400,
+            "tag": "original",
+            "url": "https://s.yimg.com/uu/api/res/1.2/IcEDHtzDwTA4hQbvBfYYrg--~B/aD00MDA7dz00MDA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/us.finance.gurufocus/40a12a1b7769c635ead36fab47a12566",
+            "width": 400
+          },
+          {
+            "height": 140,
+            "tag": "140x140",
+            "url": "https://s.yimg.com/uu/api/res/1.2/vEdfVlwAwFQwSkiElMztoQ--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/us.finance.gurufocus/40a12a1b7769c635ead36fab47a12566",
+            "width": 140
+          }
+        ]
+      },
+      "title": "Apple Warns Users in 84 Countries of New Cyber Threat Activity",
+      "type": "STORY",
+      "uuid": "fa0e7d24-e7d3-30bf-b789-522a3a115deb"
+    },
+    {
+      "link": "https://finance.yahoo.com/video/apples-executive-departures-mean-iphone-145822528.html",
+      "providerPublishTime": 1764946702,
+      "publisher": "Yahoo Finance Video",
+      "relatedTickers": [
+        "AAPL",
+        "META"
+      ],
+      "thumbnail": {
+        "resolutions": [
+          {
+            "height": 3946,
+            "tag": "original",
+            "url": "https://s.yimg.com/uu/api/res/1.2/1Qm27U38rIFz_ituyjLSZg--~B/aD0zOTQ2O3c9NzAwODthcHBpZD15dGFjaHlvbg--/https://s.yimg.com/os/creatr-uploaded-images/2025-12/34b5f310-d1e9-11f0-bd6d-97660f9b7022",
+            "width": 7008
+          },
+          {
+            "height": 140,
+            "tag": "140x140",
+            "url": "https://s.yimg.com/uu/api/res/1.2/ehVMuBWVEjP86HVQHXI.ww--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://s.yimg.com/os/creatr-uploaded-images/2025-12/34b5f310-d1e9-11f0-bd6d-97660f9b7022",
+            "width": 140
+          }
+        ]
+      },
+      "title": "What Apple's executive departures mean for the iPhone maker",
+      "type": "VIDEO",
+      "uuid": "6dd891a7-9e3d-3135-9db9-03304388cd01"
+    },
+    {
+      "link": "https://finance.yahoo.com/video/india-weighs-greater-phone-location-144206007.html",
+      "providerPublishTime": 1764945726,
+      "publisher": "Reuters Videos",
+      "relatedTickers": [
+        "AAPL",
+        "GOOG",
+        "SSNLF"
+      ],
+      "thumbnail": {
+        "resolutions": [
+          {
+            "height": 720,
+            "tag": "original",
+            "url": "https://s.yimg.com/uu/api/res/1.2/gs80apIwF5KSMxAS_qHj9A--~B/aD03MjA7dz0xMjgwO2FwcGlkPXl0YWNoeW9u/https://cf-images.us-east-1.prod.boltdns.net/v1/jit/6415665815001/7fa876f7-af30-4b41-9ce5-89a0d4197b1f/main/1280x720/42s527ms/match/image.jpg",
+            "width": 1280
+          },
+          {
+            "height": 140,
+            "tag": "140x140",
+            "url": "https://s.yimg.com/uu/api/res/1.2/nEjkPPBO5SZsje7HLr6r.A--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://cf-images.us-east-1.prod.boltdns.net/v1/jit/6415665815001/7fa876f7-af30-4b41-9ce5-89a0d4197b1f/main/1280x720/42s527ms/match/image.jpg",
+            "width": 140
+          }
+        ]
+      },
+      "title": "India weighs greater phone-location surveillance; tech giants protest",
+      "type": "VIDEO",
+      "uuid": "4356324a-99cf-348c-8a1a-ab348669c171"
+    },
+    {
+      "link": "https://finance.yahoo.com/news/chatgpt-thinks-apple-stock-price-142124171.html",
+      "providerPublishTime": 1764944484,
+      "publisher": "Benzinga",
+      "relatedTickers": [
+        "AAPL",
+        "OPAI.PVT",
+        "SOFI",
+        "SSNLF"
+      ],
+      "thumbnail": {
+        "resolutions": [
+          {
+            "height": 480,
+            "tag": "original",
+            "url": "https://s.yimg.com/uu/api/res/1.2/bnYcI5O6nCC60baGb6zAqQ--~B/aD00ODA7dz03MjA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/benzinga_79/69b00f7f2a1194b4b291e1f8f938cff3",
+            "width": 720
+          },
+          {
+            "height": 140,
+            "tag": "140x140",
+            "url": "https://s.yimg.com/uu/api/res/1.2/TR8ULzHTZr9hEwubqD4mDw--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/benzinga_79/69b00f7f2a1194b4b291e1f8f938cff3",
+            "width": 140
+          }
+        ]
+      },
+      "title": "ChatGPT Thinks Apple Stock Price Will Close At This Level By The End of 2025",
+      "type": "STORY",
+      "uuid": "6676a1f6-4776-3468-bdce-37df6266a052"
+    },
+    {
+      "link": "https://finance.yahoo.com/video/netflix-reaches-72b-warner-bros-141945849.html",
+      "providerPublishTime": 1764944385,
+      "publisher": "Yahoo Finance Video",
+      "relatedTickers": [
+        "NFLX",
+        "WBD",
+        "AAPL"
+      ],
+      "thumbnail": {
+        "resolutions": [
+          {
+            "height": 3243,
+            "tag": "original",
+            "url": "https://s.yimg.com/uu/api/res/1.2/VGBt5TExZ_2s6IAWUirtfQ--~B/aD0zMjQzO3c9NTc2MDthcHBpZD15dGFjaHlvbg--/https://s.yimg.com/os/creatr-uploaded-images/2025-12/ebfcd750-d1e4-11f0-9e7e-a1b253f72a63",
+            "width": 5760
+          },
+          {
+            "height": 140,
+            "tag": "140x140",
+            "url": "https://s.yimg.com/uu/api/res/1.2/MK8zzD_kM9CKem_4kR_EVg--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://s.yimg.com/os/creatr-uploaded-images/2025-12/ebfcd750-d1e4-11f0-9e7e-a1b253f72a63",
+            "width": 140
+          }
+        ]
+      },
+      "title": "Netflix reaches $72B Warner Bros. deal, PCE inflation data",
+      "type": "VIDEO",
+      "uuid": "f9fdee6e-c001-3895-868f-c9c905dccd1f"
+    },
+    {
+      "link": "https://finance.yahoo.com/news/neuralink-max-hodak-building-something-125647706.html",
+      "providerPublishTime": 1764939407,
+      "publisher": "TechCrunch",
+      "relatedTickers": [
+        "NEUR.PVT",
+        "DUK",
+        "AAPL"
+      ],
+      "thumbnail": {
+        "resolutions": [
+          {
+            "height": 1160,
+            "tag": "original",
+            "url": "https://s.yimg.com/uu/api/res/1.2/H6ZGBQKiqdjph8vKpSMF.A--~B/aD0xMTYwO3c9MTYzNDthcHBpZD15dGFjaHlvbg--/https://media.zenfs.com/en/techcrunch_finance_785/970dc295cb1ee168227a47d7debf4508",
+            "width": 1634
+          },
+          {
+            "height": 140,
+            "tag": "140x140",
+            "url": "https://s.yimg.com/uu/api/res/1.2/0me_AcBlnJVaGt3kgaq4NQ--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/techcrunch_finance_785/970dc295cb1ee168227a47d7debf4508",
+            "width": 140
+          }
+        ]
+      },
+      "title": "After Neuralink, Max Hodak is building something stranger",
+      "type": "STORY",
+      "uuid": "7bb45cbb-15c3-3699-a9b0-183b269e483d"
+    }
+  ],
+  "quotes": [
+    {
+      "dispSecIndFlag": true,
+      "exchDisp": "NASDAQ",
+      "exchange": "NMS",
+      "index": "quotes",
+      "industry": "Consumer Electronics",
+      "isYahooFinance": true,
+      "longname": "Apple Inc.",
+      "quoteType": "EQUITY",
+      "score": 16633500.0,
+      "sector": "Technology",
+      "shortname": "Apple Inc.",
+      "symbol": "AAPL",
+      "typeDisp": "Equity"
+    },
+    {
+      "exchDisp": "NASDAQ",
+      "exchange": "NGM",
+      "index": "quotes",
+      "isYahooFinance": true,
+      "longname": "Direxion Daily AAPL Bull 2X Shares",
+      "quoteType": "ETF",
+      "score": 20010.0,
+      "shortname": "Direxion Daily AAPL Bull 2X Sha",
+      "symbol": "AAPU",
+      "typeDisp": "ETF"
+    },
+    {
+      "exchDisp": "Buenos Aires",
+      "exchange": "BUE",
+      "index": "quotes",
+      "industry": "Consumer Electronics",
+      "isYahooFinance": true,
+      "longname": "Apple Inc.",
+      "quoteType": "EQUITY",
+      "score": 20009.0,
+      "sector": "Technology",
+      "shortname": "APPLE INC CEDEAR(REPR 1/20 SHR)",
+      "symbol": "AAPL.BA",
+      "typeDisp": "Equity"
+    },
+    {
+      "exchDisp": "OPR",
+      "exchange": "OPR",
+      "index": "quotes",
+      "isYahooFinance": true,
+      "quoteType": "OPTION",
+      "score": 20008.0,
+      "shortname": "AAPL Feb 2026 285.000 call",
+      "symbol": "AAPL260220C00285000",
+      "typeDisp": "Option"
+    },
+    {
+      "exchDisp": "OPR",
+      "exchange": "OPR",
+      "index": "quotes",
+      "isYahooFinance": true,
+      "longname": "AAPL Dec 2025 282.500 call",
+      "quoteType": "OPTION",
+      "score": 20004.0,
+      "shortname": "AAPL Dec 2025 282.500 call",
+      "symbol": "AAPL251205C00282500",
+      "typeDisp": "Option"
+    }
+  ],
+  "researchReports": [],
+  "screenerFieldResults": [],
+  "timeTakenForAlgowatchlist": 400,
+  "timeTakenForCrunchbase": 0,
+  "timeTakenForCulturalAssets": 0,
+  "timeTakenForNav": 400,
+  "timeTakenForNews": 700,
+  "timeTakenForPredefinedScreener": 400,
+  "timeTakenForQuotes": 432,
+  "timeTakenForResearchReports": 0,
+  "timeTakenForScreenerField": 0,
+  "timeTakenForSearchLists": 0,
+  "totalTime": 50
+}

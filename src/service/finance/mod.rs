@@ -4,12 +4,13 @@ use finance_query_core::{FetchClient, YahooAuthManager, YahooError, YahooFinance
 use serde_json::Value;
 
 use crate::models::{
-    FinancialSummary, Frequency, HolderType, HoldersOverview, PriceQuote, StatementType,
+    FinancialSummary, Frequency, HolderType, HoldersOverview, NewsItem, PriceQuote, StatementType,
 };
 
 pub mod fundamentals;
 pub mod holders;
 pub mod options;
+pub mod news;
 
 #[derive(Debug, thiserror::Error)]
 pub enum FinanceServiceError {
@@ -149,6 +150,22 @@ impl FinanceService {
         let data =
             holders::fetch_holders(self.client.as_ref(), symbol, holder_type).await?;
         Ok(data)
+    }
+
+    /// Fetch news for a symbol (limited number of items).
+    pub async fn get_news(
+        &self,
+        symbol: &str,
+        limit: usize,
+    ) -> Result<Vec<NewsItem>, FinanceServiceError> {
+        let limit = limit.max(1).min(20);
+        let items = news::fetch_news(self.client.as_ref(), symbol, limit).await?;
+        if items.is_empty() {
+            return Err(FinanceServiceError::NotFound(format!(
+                "no news found for symbol {symbol}"
+            )));
+        }
+        Ok(items)
     }
 
 }
