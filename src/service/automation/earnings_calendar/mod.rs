@@ -133,7 +133,6 @@ struct DayColumn {
     date: NaiveDate,
     before: Vec<EarningsEvent>,
     after: Vec<EarningsEvent>,
-    tba: Vec<EarningsEvent>,
 }
 
 enum Session {
@@ -142,19 +141,26 @@ enum Session {
     Tba,
 }
 
-const COLUMN_WIDTH: u32 = 320;
-const ENTRY_HEIGHT: u32 = 115;
-const HEADER_HEIGHT: u32 = 70;
-const MARGIN: u32 = 18;
-const TITLE_COLOR: Rgba<u8> = Rgba([60, 45, 24, 255]);
-const ACCENT_COLOR: Rgba<u8> = Rgba([196, 140, 79, 255]);
-const SECTION_BG: Rgba<u8> = Rgba([255, 255, 255, 255]);
-const CANVAS_BG: Rgba<u8> = Rgba([245, 238, 228, 255]);
-const COLUMN_BG: Rgba<u8> = Rgba([252, 244, 232, 255]);
-const BORDER_COLOR: Rgba<u8> = Rgba([220, 205, 180, 255]);
-const LOGO_W: u32 = 240;
-const LOGO_H: u32 = 90;
-const MAX_PER_SECTION: usize = 8;
+// Layout constants
+const HALF_WIDTH: u32 = 180;
+const DAY_WIDTH: u32 = HALF_WIDTH * 2;
+const ENTRY_HEIGHT: u32 = 85;
+const HEADER_HEIGHT: u32 = 60;
+const MARGIN: u32 = 20;
+const DIVIDER_WIDTH: u32 = 2;
+
+// Colors
+const TITLE_COLOR: Rgba<u8> = Rgba([40, 35, 30, 255]);
+const HEADER_COLOR: Rgba<u8> = Rgba([100, 100, 100, 255]);
+const CANVAS_BG: Rgba<u8> = Rgba([255, 255, 255, 255]);
+const COLUMN_BG: Rgba<u8> = Rgba([255, 255, 255, 255]);
+const ENTRY_BG: Rgba<u8> = Rgba([248, 248, 248, 255]);
+const DIVIDER_COLOR: Rgba<u8> = Rgba([220, 220, 220, 255]);
+
+// Logo sizing
+const LOGO_W: u32 = 120;
+const LOGO_H: u32 = 50;
+const MAX_PER_COLUMN: usize = 12;
 
 /// Render a 5-day earnings calendar image for Discord posts/commands.
 pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, String> {
@@ -167,7 +173,8 @@ pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, 
 
     let font = load_font()?;
     let client = Client::builder()
-        .timeout(StdDuration::from_secs(5))
+        .timeout(StdDuration::from_secs(2))  // 2 second timeout per request
+        .connect_timeout(StdDuration::from_secs(1))  // 1 second connect timeout
         .user_agent("stacks-bot/earnings-calendar")
         .build()
         .map_err(|e| format!("logo client build failed: {e}"))?;
@@ -178,24 +185,23 @@ pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, 
             c.before
                 .iter()
                 .chain(c.after.iter())
-                .chain(c.tba.iter())
                 .map(|e| e.symbol.clone())
         })
         .collect();
 
-    // Fetch logos with 20 second timeout for entire operation
+    // Fetch logos with 8 second timeout for entire operation
     let logos = match timeout(
-        StdDuration::from_secs(20),
+        StdDuration::from_secs(8),
         fetch_logos(&unique_symbols, &client)
     ).await {
         Ok(logos) => logos,
         Err(_) => {
-            warn!("Logo fetching timed out, rendering without logos");
+            warn!("Logo fetching timed out after 8s, rendering without logos");
             HashMap::new()
         }
     };
 
-    let mut image = DynamicImage::ImageRgba8(draw_canvas(&columns, &font, &logos));
+    let image = DynamicImage::ImageRgba8(draw_canvas(&columns, &font, &logos));
     let mut buffer = Vec::new();
     image
         .write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png)
@@ -207,7 +213,6 @@ pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, 
 fn load_font() -> Result<FontArc, String> {
     let source = SystemSource::new();
     
-    // Try to find a bold sans-serif font
     let handle = source
         .select_best_match(
             &[FamilyName::SansSerif],
@@ -229,13 +234,20 @@ fn load_font() -> Result<FontArc, String> {
 }
 
 async fn fetch_logos(symbols: &HashSet<String>, client: &Client) -> HashMap<String, RgbaImage> {
+    use tokio::time::timeout;
+    
     let mut handles = Vec::new();
     
-    for sym in symbols {
+    // Limit concurrent logo fetches to avoid overwhelming the system
+    for sym in symbols.iter().take(50) {  // Cap at 50 logos
         let sym = sym.clone();
         let client = client.clone();
         let handle = tokio::spawn(async move {
-            download_logo(&sym, &client).await.map(|img| (sym, img))
+            // Add 2 second timeout per logo fetch
+            match timeout(StdDuration::from_secs(2), download_logo(&sym, &client)).await {
+                Ok(Some(img)) => Some((sym, img)),
+                _ => None,
+            }
         });
         handles.push(handle);
     }
@@ -250,27 +262,27 @@ async fn fetch_logos(symbols: &HashSet<String>, client: &Client) -> HashMap<Stri
 }
 
 async fn download_logo(symbol: &str, client: &Client) -> Option<RgbaImage> {
-    use tokio::time::timeout;
-    
+    // Try multiple logo sources with better quality images
     let urls = [
-        format!("https://financialmodelingprep.com/image-stock/{symbol}.png"),
-        format!("https://storage.googleapis.com/iex/api/logos/{symbol}.png"),
+        // Clearbit provides high-quality company logos
+        format!("https://logo.clearbit.com/{}.com", symbol.to_lowercase()),
+        // Financial Modeling Prep
+        format!("https://financialmodelingprep.com/image-stock/{}.png", symbol),
+        // IEX Cloud logos
+        format!("https://storage.googleapis.com/iex/api/logos/{}.png", symbol),
+        // Alternative: Logo.dev
+        format!("https://img.logo.dev/ticker/{}?token=pk_X-7cEE8hSkKawJLLBC1mIw", symbol),
     ];
 
     for url in urls {
-        // Add per-request timeout of 3 seconds
-        let fetch = async {
-            let resp = client.get(&url).send().await.ok()?;
-            if !resp.status().is_success() {
-                return None;
+        if let Ok(resp) = client.get(&url).send().await {
+            if resp.status().is_success() {
+                if let Ok(bytes) = resp.bytes().await {
+                    if let Ok(img) = image::load_from_memory(&bytes) {
+                        return Some(fit_logo(&img));
+                    }
+                }
             }
-            let bytes = resp.bytes().await.ok()?;
-            let img = image::load_from_memory(&bytes).ok()?;
-            Some(fit_logo(&img))
-        };
-        
-        if let Ok(Some(img)) = timeout(StdDuration::from_secs(3), fetch).await {
-            return Some(img);
         }
     }
     None
@@ -278,13 +290,17 @@ async fn download_logo(symbol: &str, client: &Client) -> Option<RgbaImage> {
 
 fn fit_logo(img: &DynamicImage) -> RgbaImage {
     let (w, h) = img.dimensions();
+    
+    // For square/circular logos, maintain aspect ratio and center
     let scale = (LOGO_W as f32 / w as f32)
         .min(LOGO_H as f32 / h as f32)
-        .min(1.2);
+        .min(1.5);  // Allow slight upscaling for small logos
+    
     let new_w = (w as f32 * scale).max(1.0).round() as u32;
     let new_h = (h as f32 * scale).max(1.0).round() as u32;
     let resized: RgbaImage = imageops::resize(img, new_w, new_h, FilterType::Lanczos3);
 
+    // Create transparent canvas
     let mut canvas = RgbaImage::from_pixel(LOGO_W, LOGO_H, Rgba([255, 255, 255, 0]));
     let x = ((LOGO_W - new_w) / 2) as i64;
     let y = ((LOGO_H - new_h) / 2) as i64;
@@ -301,20 +317,15 @@ fn build_columns(events: &[EarningsEvent]) -> Vec<DayColumn> {
             date,
             before: Vec::new(),
             after: Vec::new(),
-            tba: Vec::new(),
         });
 
         match classify_session(ev.time_of_day.as_deref()) {
-            Session::Before => entry.before.push(ev.clone()),
+            Session::Before | Session::Tba => entry.before.push(ev.clone()),
             Session::After => entry.after.push(ev.clone()),
-            Session::Tba => entry.tba.push(ev.clone()),
         }
     }
 
-    grouped
-        .into_values()
-        .take(5) // keep the view compact like the sample
-        .collect()
+    grouped.into_values().take(5).collect()
 }
 
 fn draw_canvas(
@@ -323,214 +334,176 @@ fn draw_canvas(
     logos: &HashMap<String, RgbaImage>,
 ) -> RgbaImage {
     let count = columns.len() as u32;
-    let width = count * COLUMN_WIDTH + (count + 1) * MARGIN;
+    let width = count * (DAY_WIDTH + DIVIDER_WIDTH) + 2 * MARGIN - DIVIDER_WIDTH;
 
-    let column_heights: Vec<u32> = columns
+    // Calculate height based on max entries
+    let max_entries = columns
         .iter()
-        .map(|c| {
-            let mut height = HEADER_HEIGHT;
-            
-            // BMO section
-            if !c.before.is_empty() {
-                let before_visible = c.before.len().min(MAX_PER_SECTION) as u32;
-                let before_overflow = if c.before.len() > MAX_PER_SECTION { 24 } else { 0 };
-                height += 26 + before_visible * ENTRY_HEIGHT + before_overflow + 12;
-            }
-            
-            // TBA section
-            if !c.tba.is_empty() {
-                let tba_visible = c.tba.len().min(MAX_PER_SECTION) as u32;
-                let tba_overflow = if c.tba.len() > MAX_PER_SECTION { 24 } else { 0 };
-                height += 26 + tba_visible * ENTRY_HEIGHT + tba_overflow + 12;
-            }
-            
-            // AMC section
-            if !c.after.is_empty() {
-                let after_visible = c.after.len().min(MAX_PER_SECTION) as u32;
-                let after_overflow = if c.after.len() > MAX_PER_SECTION { 24 } else { 0 };
-                height += 26 + after_visible * ENTRY_HEIGHT + after_overflow + 12;
-            }
-            
-            height + 12 // bottom breathing room
-        })
-        .collect();
-    let height = column_heights.iter().max().cloned().unwrap_or(0) + 2 * MARGIN;
+        .map(|c| c.before.len().max(c.after.len()))
+        .max()
+        .unwrap_or(0)
+        .min(MAX_PER_COLUMN);
+    
+    let height = MARGIN + HEADER_HEIGHT + (max_entries as u32 * ENTRY_HEIGHT) + MARGIN;
 
     let mut img = RgbaImage::from_pixel(width, height, CANVAS_BG);
 
     for (idx, column) in columns.iter().enumerate() {
-        let x = MARGIN + idx as u32 * (COLUMN_WIDTH + MARGIN);
-        let y = MARGIN;
-        draw_column(&mut img, x, y, column, font, logos, column_heights[idx]);
+        let x = MARGIN + idx as u32 * (DAY_WIDTH + DIVIDER_WIDTH);
+        draw_day_column(&mut img, x, MARGIN, column, font, logos);
+        
+        // Draw divider between days
+        if idx < columns.len() - 1 {
+            let divider_x = x + DAY_WIDTH;
+            let divider_rect = Rect::at(divider_x as i32, MARGIN as i32)
+                .of_size(DIVIDER_WIDTH, height - 2 * MARGIN);
+            draw_filled_rect_mut(&mut img, divider_rect, DIVIDER_COLOR);
+        }
     }
 
     img
 }
 
-fn draw_column(
+fn draw_day_column(
     img: &mut RgbaImage,
     x: u32,
     y: u32,
     column: &DayColumn,
     font: &FontArc,
     logos: &HashMap<String, RgbaImage>,
-    column_height: u32,
 ) {
-    let rect = Rect::at(x as i32, y as i32).of_size(COLUMN_WIDTH, column_height);
-    draw_filled_rect_mut(img, rect, COLUMN_BG);
+    // Draw background
+    let max_entries = column.before.len().max(column.after.len()).min(MAX_PER_COLUMN);
+    let col_height = HEADER_HEIGHT + (max_entries as u32 * ENTRY_HEIGHT);
+    let bg_rect = Rect::at(x as i32, y as i32).of_size(DAY_WIDTH, col_height);
+    draw_filled_rect_mut(img, bg_rect, COLUMN_BG);
 
-    let scale_header = PxScale::from(30.0);
-    let label = format!(
-        "{} {}",
-        column.date.weekday().to_string(),
-        column.date.format("%b %e")
+    // Draw day header
+    let day_label = column.date.weekday().to_string();
+    let date_label = column.date.format("%b %e").to_string();
+    
+    draw_centered_text(
+        img,
+        font,
+        &day_label,
+        PxScale::from(24.0),
+        x,
+        DAY_WIDTH,
+        y + 8,
+        TITLE_COLOR,
     );
     draw_centered_text(
         img,
         font,
-        &label,
-        scale_header,
+        &date_label,
+        PxScale::from(18.0),
         x,
-        COLUMN_WIDTH,
-        y + 12,
-        TITLE_COLOR,
+        DAY_WIDTH,
+        y + 35,
+        HEADER_COLOR,
     );
 
-    let mut current_y = y + HEADER_HEIGHT;
-    
-    // Draw BMO section if there are any
-    if !column.before.is_empty() {
-        draw_section_title(img, font, "Before Open", x, current_y, ACCENT_COLOR);
-        current_y += 26;
-        current_y = draw_entries(img, font, x, current_y, &column.before, logos, "BMO");
-        current_y += 12;
-    }
-    
-    // Draw TBA section if there are any
-    if !column.tba.is_empty() {
-        draw_section_title(img, font, "Time TBA", x, current_y, ACCENT_COLOR);
-        current_y += 26;
-        current_y = draw_entries(img, font, x, current_y, &column.tba, logos, "TBA");
-        current_y += 12;
-    }
-    
-    // Draw AMC section if there are any
-    if !column.after.is_empty() {
-        draw_section_title(img, font, "After Close", x, current_y, ACCENT_COLOR);
-        current_y += 26;
-        let _ = draw_entries(img, font, x, current_y, &column.after, logos, "AMC");
-    }
+    // Draw column headers
+    let header_y = y + HEADER_HEIGHT - 20;
+    draw_centered_text(
+        img,
+        font,
+        "Before Open",
+        PxScale::from(14.0),
+        x,
+        HALF_WIDTH,
+        header_y,
+        HEADER_COLOR,
+    );
+    draw_centered_text(
+        img,
+        font,
+        "After Close",
+        PxScale::from(14.0),
+        x + HALF_WIDTH,
+        HALF_WIDTH,
+        header_y,
+        HEADER_COLOR,
+    );
+
+    // Draw entries
+    let entry_start_y = y + HEADER_HEIGHT;
+    draw_half_column(img, font, x, entry_start_y, &column.before, logos);
+    draw_half_column(img, font, x + HALF_WIDTH, entry_start_y, &column.after, logos);
 }
 
-fn draw_entries(
+fn draw_half_column(
     img: &mut RgbaImage,
     font: &FontArc,
     x: u32,
-    mut y: u32,
+    y: u32,
     events: &[EarningsEvent],
     logos: &HashMap<String, RgbaImage>,
-    fallback_label: &str,
-) -> u32 {
-    let scale_symbol = PxScale::from(28.0);
-    let scale_sub = PxScale::from(20.0);
+) {
+    for (idx, ev) in events.iter().take(MAX_PER_COLUMN).enumerate() {
+        let entry_y = y + (idx as u32 * ENTRY_HEIGHT);
+        
+        // Draw entry background
+        let entry_rect = Rect::at((x + 4) as i32, (entry_y + 2) as i32)
+            .of_size(HALF_WIDTH - 8, ENTRY_HEIGHT - 4);
+        draw_filled_rect_mut(img, entry_rect, ENTRY_BG);
 
-    let display_events: Vec<&EarningsEvent> = events.iter().take(MAX_PER_SECTION).collect();
-    for ev in display_events {
-        let entry_rect =
-            Rect::at(x as i32 + 8, y as i32).of_size(COLUMN_WIDTH - 16, ENTRY_HEIGHT - 8);
-        draw_filled_rect_mut(img, entry_rect, SECTION_BG);
-
-        if let Some(logo) = logos.get(&ev.symbol) {
-            let lx = x + (COLUMN_WIDTH - LOGO_W) / 2;
-            let ly = y + 10;
-            imageops::overlay(img, logo, lx as i64, ly as i64);
-        } else {
-            let placeholder = placeholder_logo(&ev.symbol, font);
-            let lx = x + (COLUMN_WIDTH - LOGO_W) / 2;
-            let ly = y + 10;
-            imageops::overlay(img, &placeholder, lx as i64, ly as i64);
-        }
-
-        let label = session_label(ev, fallback_label);
+        // Draw ticker at top
         draw_centered_text(
             img,
             font,
             &ev.symbol,
-            scale_symbol,
+            PxScale::from(12.0),
             x,
-            COLUMN_WIDTH,
-            y + LOGO_H + 12,
-            TITLE_COLOR,
-        );
-        draw_centered_text(
-            img,
-            font,
-            label,
-            scale_sub,
-            x,
-            COLUMN_WIDTH,
-            y + LOGO_H + 38,
-            ACCENT_COLOR,
+            HALF_WIDTH,
+            entry_y + 6,
+            HEADER_COLOR,
         );
 
-        // border around entry
-        imageproc::drawing::draw_hollow_rect_mut(img, entry_rect, BORDER_COLOR);
-
-        y += ENTRY_HEIGHT;
+        // Draw logo
+        if let Some(logo) = logos.get(&ev.symbol) {
+            let logo_x = x + (HALF_WIDTH - LOGO_W) / 2;
+            let logo_y = entry_y + 22;
+            imageops::overlay(img, logo, logo_x as i64, logo_y as i64);
+        } else {
+            let placeholder = placeholder_logo(&ev.symbol, font);
+            let logo_x = x + (HALF_WIDTH - LOGO_W) / 2;
+            let logo_y = entry_y + 22;
+            imageops::overlay(img, &placeholder, logo_x as i64, logo_y as i64);
+        }
     }
 
-    let overflow = events.len().saturating_sub(MAX_PER_SECTION);
+    // Show overflow count
+    let overflow = events.len().saturating_sub(MAX_PER_COLUMN);
     if overflow > 0 {
-        let notice = format!("+{} more", overflow);
+        let overflow_y = y + (MAX_PER_COLUMN as u32 * ENTRY_HEIGHT) - 15;
+        let notice = format!("+{}", overflow);
         draw_centered_text(
             img,
             font,
             &notice,
-            PxScale::from(18.0),
+            PxScale::from(14.0),
             x,
-            COLUMN_WIDTH,
-            y + 4,
-            TITLE_COLOR,
+            HALF_WIDTH,
+            overflow_y,
+            HEADER_COLOR,
         );
-        y += 24;
     }
-
-    y
 }
 
 fn placeholder_logo(symbol: &str, font: &FontArc) -> RgbaImage {
-    let mut img = RgbaImage::from_pixel(LOGO_W, LOGO_H, Rgba([235, 227, 210, 255]));
+    let mut img = RgbaImage::from_pixel(LOGO_W, LOGO_H, Rgba([240, 240, 240, 255]));
     draw_centered_text(
         &mut img,
         font,
         symbol,
-        PxScale::from(26.0),
+        PxScale::from(18.0),
         0,
         LOGO_W,
-        (LOGO_H / 2) - 18,
-        TITLE_COLOR,
+        (LOGO_H / 2) - 12,
+        HEADER_COLOR,
     );
     img
-}
-
-fn draw_section_title(
-    img: &mut RgbaImage,
-    font: &FontArc,
-    text: &str,
-    x: u32,
-    y: u32,
-    color: Rgba<u8>,
-) {
-    draw_centered_text(
-        img,
-        font,
-        text,
-        PxScale::from(22.0),
-        x,
-        COLUMN_WIDTH,
-        y,
-        color,
-    );
 }
 
 fn draw_centered_text(
@@ -560,13 +533,5 @@ fn classify_session(time: Option<&str>) -> Session {
         Session::Before
     } else {
         Session::Tba
-    }
-}
-
-fn session_label<'a>(event: &EarningsEvent, fallback: &'a str) -> &'a str {
-    match classify_session(event.time_of_day.as_deref()) {
-        Session::Before => "BMO",
-        Session::After => "AMC",
-        Session::Tba => fallback,
     }
 }
