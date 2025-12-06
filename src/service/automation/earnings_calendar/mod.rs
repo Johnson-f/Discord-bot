@@ -158,6 +158,8 @@ const MAX_PER_SECTION: usize = 8;
 
 /// Render a 5-day earnings calendar image for Discord posts/commands.
 pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, String> {
+    use tokio::time::timeout;
+    
     let columns = build_columns(events);
     if columns.is_empty() {
         return Err("no events to render".into());
@@ -165,7 +167,7 @@ pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, 
 
     let font = load_font()?;
     let client = Client::builder()
-        .timeout(StdDuration::from_secs(8))
+        .timeout(StdDuration::from_secs(5))
         .user_agent("stacks-bot/earnings-calendar")
         .build()
         .map_err(|e| format!("logo client build failed: {e}"))?;
@@ -181,7 +183,17 @@ pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, 
         })
         .collect();
 
-    let logos = fetch_logos(&unique_symbols, &client).await;
+    // Fetch logos with 20 second timeout for entire operation
+    let logos = match timeout(
+        StdDuration::from_secs(20),
+        fetch_logos(&unique_symbols, &client)
+    ).await {
+        Ok(logos) => logos,
+        Err(_) => {
+            warn!("Logo fetching timed out, rendering without logos");
+            HashMap::new()
+        }
+    };
 
     let mut image = DynamicImage::ImageRgba8(draw_canvas(&columns, &font, &logos));
     let mut buffer = Vec::new();
@@ -217,31 +229,48 @@ fn load_font() -> Result<FontArc, String> {
 }
 
 async fn fetch_logos(symbols: &HashSet<String>, client: &Client) -> HashMap<String, RgbaImage> {
-    let mut logos = HashMap::new();
+    let mut handles = Vec::new();
+    
     for sym in symbols {
-        if let Some(img) = download_logo(sym, client).await {
-            logos.insert(sym.clone(), img);
+        let sym = sym.clone();
+        let client = client.clone();
+        let handle = tokio::spawn(async move {
+            download_logo(&sym, &client).await.map(|img| (sym, img))
+        });
+        handles.push(handle);
+    }
+    
+    let mut logos = HashMap::new();
+    for handle in handles {
+        if let Ok(Some((sym, img))) = handle.await {
+            logos.insert(sym, img);
         }
     }
     logos
 }
 
 async fn download_logo(symbol: &str, client: &Client) -> Option<RgbaImage> {
+    use tokio::time::timeout;
+    
     let urls = [
         format!("https://financialmodelingprep.com/image-stock/{symbol}.png"),
         format!("https://storage.googleapis.com/iex/api/logos/{symbol}.png"),
     ];
 
     for url in urls {
-        if let Ok(resp) = client.get(&url).send().await {
+        // Add per-request timeout of 3 seconds
+        let fetch = async {
+            let resp = client.get(&url).send().await.ok()?;
             if !resp.status().is_success() {
-                continue;
+                return None;
             }
-            if let Ok(bytes) = resp.bytes().await {
-                if let Ok(img) = image::load_from_memory(&bytes) {
-                    return Some(fit_logo(&img));
-                }
-            }
+            let bytes = resp.bytes().await.ok()?;
+            let img = image::load_from_memory(&bytes).ok()?;
+            Some(fit_logo(&img))
+        };
+        
+        if let Ok(Some(img)) = timeout(StdDuration::from_secs(3), fetch).await {
+            return Some(img);
         }
     }
     None
@@ -299,28 +328,30 @@ fn draw_canvas(
     let column_heights: Vec<u32> = columns
         .iter()
         .map(|c| {
-            let before_total = c.before.len() + c.tba.len();
-            let after_total = c.after.len();
-
-            let before_visible = before_total.min(MAX_PER_SECTION) as u32;
-            let after_visible = after_total.min(MAX_PER_SECTION) as u32;
-
-            let before_overflow = if before_total > MAX_PER_SECTION {
-                24
-            } else {
-                0
-            };
-            let after_overflow = if after_total > MAX_PER_SECTION { 24 } else { 0 };
-
-            HEADER_HEIGHT
-                + 26 // space after header into first section title
-                + before_visible * ENTRY_HEIGHT
-                + before_overflow
-                + 12 // gap between sections
-                + 26 // after close title
-                + after_visible * ENTRY_HEIGHT
-                + after_overflow
-                + 12 // bottom breathing room
+            let mut height = HEADER_HEIGHT;
+            
+            // BMO section
+            if !c.before.is_empty() {
+                let before_visible = c.before.len().min(MAX_PER_SECTION) as u32;
+                let before_overflow = if c.before.len() > MAX_PER_SECTION { 24 } else { 0 };
+                height += 26 + before_visible * ENTRY_HEIGHT + before_overflow + 12;
+            }
+            
+            // TBA section
+            if !c.tba.is_empty() {
+                let tba_visible = c.tba.len().min(MAX_PER_SECTION) as u32;
+                let tba_overflow = if c.tba.len() > MAX_PER_SECTION { 24 } else { 0 };
+                height += 26 + tba_visible * ENTRY_HEIGHT + tba_overflow + 12;
+            }
+            
+            // AMC section
+            if !c.after.is_empty() {
+                let after_visible = c.after.len().min(MAX_PER_SECTION) as u32;
+                let after_overflow = if c.after.len() > MAX_PER_SECTION { 24 } else { 0 };
+                height += 26 + after_visible * ENTRY_HEIGHT + after_overflow + 12;
+            }
+            
+            height + 12 // bottom breathing room
         })
         .collect();
     let height = column_heights.iter().max().cloned().unwrap_or(0) + 2 * MARGIN;
@@ -366,17 +397,29 @@ fn draw_column(
     );
 
     let mut current_y = y + HEADER_HEIGHT;
-    draw_section_title(img, font, "Before Open", x, current_y, ACCENT_COLOR);
-    current_y += 26;
-    current_y = draw_entries(img, font, x, current_y, &column.before, logos, "BMO");
-    if !column.tba.is_empty() {
-        current_y = draw_entries(img, font, x, current_y, &column.tba, logos, "TBA");
+    
+    // Draw BMO section if there are any
+    if !column.before.is_empty() {
+        draw_section_title(img, font, "Before Open", x, current_y, ACCENT_COLOR);
+        current_y += 26;
+        current_y = draw_entries(img, font, x, current_y, &column.before, logos, "BMO");
+        current_y += 12;
     }
-
-    current_y += 12;
-    draw_section_title(img, font, "After Close", x, current_y, ACCENT_COLOR);
-    current_y += 26;
-    let _ = draw_entries(img, font, x, current_y, &column.after, logos, "AMC");
+    
+    // Draw TBA section if there are any
+    if !column.tba.is_empty() {
+        draw_section_title(img, font, "Time TBA", x, current_y, ACCENT_COLOR);
+        current_y += 26;
+        current_y = draw_entries(img, font, x, current_y, &column.tba, logos, "TBA");
+        current_y += 12;
+    }
+    
+    // Draw AMC section if there are any
+    if !column.after.is_empty() {
+        draw_section_title(img, font, "After Close", x, current_y, ACCENT_COLOR);
+        current_y += 26;
+        let _ = draw_entries(img, font, x, current_y, &column.after, logos, "AMC");
+    }
 }
 
 fn draw_entries(
