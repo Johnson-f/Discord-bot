@@ -6,6 +6,9 @@ use std::time::Duration as StdDuration;
 
 use ab_glyph::{FontArc, PxScale};
 use chrono::{Datelike, NaiveDate, Timelike, Utc};
+use font_kit::family_name::FamilyName;
+use font_kit::properties::{Properties, Weight};
+use font_kit::source::SystemSource;
 use image::imageops::{self, FilterType};
 use image::{DynamicImage, ImageFormat, GenericImageView, Rgba, RgbaImage};
 use imageproc::drawing::{draw_filled_rect_mut, draw_text_mut, text_size};
@@ -190,8 +193,27 @@ pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, 
 }
 
 fn load_font() -> Result<FontArc, String> {
-    FontArc::try_from_slice(include_bytes!("../../../../assets/fonts/Roboto-Bold.ttf"))
-        .map_err(|_| "failed to load bundled Roboto font".to_string())
+    let source = SystemSource::new();
+    
+    // Try to find a bold sans-serif font
+    let handle = source
+        .select_best_match(
+            &[FamilyName::SansSerif],
+            &Properties::new().weight(Weight::BOLD)
+        )
+        .map_err(|e| format!("Failed to find system font: {}", e))?;
+    
+    let font = handle
+        .load()
+        .map_err(|e| format!("Failed to load font: {}", e))?;
+    
+    let font_data = font
+        .copy_font_data()
+        .ok_or_else(|| "Failed to copy font data".to_string())?
+        .to_vec();
+    
+    FontArc::try_from_vec(font_data)
+        .map_err(|_| "Failed to create FontArc from system font".to_string())
 }
 
 async fn fetch_logos(symbols: &HashSet<String>, client: &Client) -> HashMap<String, RgbaImage> {
