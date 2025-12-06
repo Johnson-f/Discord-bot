@@ -24,4 +24,6 @@ pub struct EarningsEvent {
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub emoji: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logo: Option<String>,  // Base64 encoded logo data from API
 }

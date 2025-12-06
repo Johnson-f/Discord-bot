@@ -31,6 +31,7 @@ struct ApiEarning {
     time: Option<String>,
     title: Option<String>,
     emoji: Option<String>,
+    logo: Option<String>,  // Added logo field
 }
 
 const EARNINGS_API_URL: &str =
@@ -52,11 +53,15 @@ pub async fn fetch_earnings_range(
     let from_str = from.format("%Y-%m-%d").to_string();
     let to_str = to.format("%Y-%m-%d").to_string();
 
-    info!("Making request to earnings API...");
+    info!("Making request to earnings API with logo support...");
 
     let resp = client
-        .get(EARNINGS_API_URL) // Changed to GET
-        .query(&[("fromDate", &from_str), ("toDate", &to_str)])
+        .get(EARNINGS_API_URL)
+        .query(&[
+            ("fromDate", from_str.as_str()),
+            ("toDate", to_str.as_str()),
+            ("includeLogos", "true"),  // Request logos from API
+        ])
         .header("Authorization", format!("Bearer {}", EARNINGS_API_BEARER))
         .send()
         .await
@@ -124,6 +129,7 @@ pub async fn fetch_earnings_range(
                 importance: s.importance,
                 title: s.title,
                 emoji: s.emoji,
+                logo: s.logo,  // Include logo data from API
             });
         }
     }
