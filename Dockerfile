@@ -15,7 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Pre-copy manifests to leverage Docker layer caching
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-COPY models ./models
 
 # Release build
 RUN cargo build --release
@@ -37,4 +36,3 @@ ENV RUST_LOG=info
 
 # Entrypoint
 CMD ["discord-bot"]
-
