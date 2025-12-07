@@ -3,7 +3,7 @@ use serde_json::to_string_pretty;
 use std::path::Path;
 use std::sync::Arc;
 
-use Discord_bot::service::finance::news::fetch_news;
+use discord_bot::service::finance::news::fetch_news;
 
 /// Integration test that hits the live Yahoo Finance API via finance-query-core.
 ///

@@ -135,7 +135,7 @@ where
     }
 
     let mut rows_sorted: Vec<&T> = rows.iter().collect();
-    rows_sorted.sort_by_key(|r| -(r.shares() as i64));
+    rows_sorted.sort_by_key(|r| -r.shares());
 
     let mut lines = Vec::new();
     lines.push(format!("{} for {}", heading, symbol));

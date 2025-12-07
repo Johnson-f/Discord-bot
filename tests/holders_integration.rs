@@ -1,7 +1,7 @@
 use finance_query_core::{FetchClient, HolderType, YahooAuthManager, YahooFinanceClient};
 use std::{fs, path::PathBuf, sync::Arc};
 
-use Discord_bot::service::finance::holders::fetch_holders;
+use discord_bot::service::finance::holders::fetch_holders;
 
 #[tokio::test]
 #[ignore = "requires network access to Yahoo Finance"]

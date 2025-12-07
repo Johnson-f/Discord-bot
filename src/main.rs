@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use std::{env, sync::Arc};
 
 use anyhow::Result;
@@ -7,17 +9,16 @@ use serenity::all::{
     CreateInteractionResponseMessage, EditAttachments, GatewayIntents, GuildId, Interaction,
 };
 use serenity::{async_trait, model::gateway::Ready, prelude::*, Client};
-use tracing::{error, info};
+use tracing::info;
 
-use tokio::time::{timeout, Duration};
-use Discord_bot::models::StatementType;
-use Discord_bot::service::automation::{earnings, options_data};
-use Discord_bot::service::command::earnings as earnings_cmd;
-use Discord_bot::service::command::fundamentals as fundamentals_cmd;
-use Discord_bot::service::command::holders as holders_cmd;
-use Discord_bot::service::command::news as news_cmd;
-use Discord_bot::service::command::quotes as quotes_cmd;
-use Discord_bot::service::finance::FinanceService;
+use discord_bot::models::StatementType;
+use discord_bot::service::automation::{earnings, options_data};
+use discord_bot::service::command::earnings as earnings_cmd;
+use discord_bot::service::command::fundamentals as fundamentals_cmd;
+use discord_bot::service::command::holders as holders_cmd;
+use discord_bot::service::command::news as news_cmd;
+use discord_bot::service::command::quotes as quotes_cmd;
+use discord_bot::service::finance::FinanceService;
 
 struct Handler {
     finance: Arc<FinanceService>,
@@ -67,6 +68,9 @@ impl EventHandler for Handler {
             let _ = guild_id
                 .create_command(&ctx.http, earnings_cmd::register_daily_command())
                 .await;
+            let _ = guild_id
+                .create_command(&ctx.http, earnings_cmd::register_after_daily_command())
+                .await;
             info!(
                 "{} is connected. Guild commands registered instantly for testing.",
                 ready.user.name
@@ -99,6 +103,11 @@ impl EventHandler for Handler {
             let _ =
                 Command::create_global_command(&ctx.http, earnings_cmd::register_daily_command())
                     .await;
+            let _ = Command::create_global_command(
+                &ctx.http,
+                earnings_cmd::register_after_daily_command(),
+            )
+                    .await;
             info!(
                 "{} is connected. Global commands registered (may take up to 1 hour).",
                 ready.user.name
@@ -109,6 +118,10 @@ impl EventHandler for Handler {
         options_data::spawn_options_pinger(ctx.http.clone(), self.finance.clone());
         // Start daily earnings poster
         earnings::spawn_earnings_poster(ctx.http.clone(), self.finance.clone());
+        // Start daily earnings (IV/IM) poster at 6pm ET
+        earnings::spawn_daily_report_poster(ctx.http.clone(), self.finance.clone());
+        // Start post-earnings (actuals) poster at 8:45am ET (BMO) and 5:50pm ET (AMC)
+        earnings::spawn_after_daily_poster(ctx.http.clone(), self.finance.clone());
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
@@ -215,7 +228,8 @@ impl EventHandler for Handler {
                         )
                         .await;
 
-                    let response = match earnings_cmd::handle_weekly(&command, &self.finance).await {
+                    let response = match earnings_cmd::handle_weekly(&command, &self.finance).await
+                    {
                         Ok(resp) => resp,
                         Err(err) => {
                             let _ = command
@@ -233,8 +247,7 @@ impl EventHandler for Handler {
                         serenity::all::EditInteractionResponse::new().content(response.content);
 
                     if let Some(bytes) = response.image {
-                        let attachment =
-                            CreateAttachment::bytes(bytes, "earnings-calendar.png");
+                        let attachment = CreateAttachment::bytes(bytes, "earnings-calendar.png");
                         let attachments = EditAttachments::new().add(attachment);
                         edit = edit.attachments(attachments);
                     }
@@ -249,7 +262,36 @@ impl EventHandler for Handler {
                         )
                         .await;
 
-                    let content = match earnings_cmd::handle_daily(&command, &self.finance, &ctx.http).await {
+                    let content = match earnings_cmd::handle_daily(
+                        &command,
+                        &self.finance,
+                        &ctx.http,
+                    )
+                    .await
+                    {
+                        Ok(msg) => msg,
+                        Err(err) => format!("❌ {}", err),
+                    };
+
+                    let _ = command
+                        .edit_response(
+                            &ctx.http,
+                            serenity::all::EditInteractionResponse::new().content(content),
+                        )
+                        .await;
+                }
+                "er-reports" => {
+                    let _ = command
+                        .create_response(
+                            &ctx.http,
+                            CreateInteractionResponse::Defer(Default::default()),
+                        )
+                        .await;
+
+                    let content =
+                        match earnings_cmd::handle_after_daily(&command, &self.finance, &ctx.http)
+                            .await
+                        {
                         Ok(msg) => msg,
                         Err(err) => format!("❌ {}", err),
                     };

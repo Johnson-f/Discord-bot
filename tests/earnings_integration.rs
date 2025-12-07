@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use serde_json::to_string_pretty;
 use std::path::Path;
 
-use Discord_bot::service::finance::earnings::fetch_earnings_range;
+use discord_bot::service::finance::earnings::fetch_earnings_range;
 
 /// Integration test that calls the external earnings calendar API.
 ///

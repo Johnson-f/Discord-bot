@@ -170,7 +170,7 @@ impl FinanceService {
         symbol: &str,
         limit: usize,
     ) -> Result<Vec<NewsItem>, FinanceServiceError> {
-        let limit = limit.max(1).min(20);
+        let limit = limit.clamp(1, 20);
         let items = news::fetch_news(self.client.as_ref(), symbol, limit).await?;
         if items.is_empty() {
             return Err(FinanceServiceError::NotFound(format!(

@@ -12,6 +12,7 @@ use tracing::{error, info};
 use crate::service::finance::options::OptionSlice;
 use crate::service::finance::FinanceService;
 
+#[allow(clippy::type_complexity)]
 static STRIKE_HISTORY: once_cell::sync::Lazy<
     Mutex<HashMap<String, Vec<(chrono::DateTime<Utc>, f64)>>>,
 > = once_cell::sync::Lazy::new(|| Mutex::new(HashMap::new()));

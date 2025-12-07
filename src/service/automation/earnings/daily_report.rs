@@ -1,11 +1,19 @@
-use chrono::{Datelike, Duration, Utc, Weekday};
+use std::env;
+use std::sync::Arc;
+
+use chrono::{Datelike, Duration, Timelike, Utc, Weekday};
+use chrono_tz::America;
 use chrono_tz::America::New_York;
+use once_cell::sync::Lazy;
 use serenity::all::{CreateMessage, Http};
 use serenity::model::prelude::ChannelId;
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
 use crate::service::finance::FinanceService;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct IvSnapshot {
     spot: f64,
@@ -14,6 +22,72 @@ struct IvSnapshot {
     put_iv: f64,
     implied_move_pct: f64,
     days_to_expiry: i64,
+}
+
+static LAST_DAILY_POST_DATE: Lazy<Mutex<Option<chrono::NaiveDate>>> =
+    Lazy::new(|| Mutex::new(None));
+
+/// Spawn a daily earnings poster (Mon–Fri at 6:00 PM ET).
+pub fn spawn_daily_report_poster(
+    http: Arc<Http>,
+    finance: Arc<FinanceService>,
+) -> Option<JoinHandle<()>> {
+    if env::var("ENABLE_EARNINGS_PINGER")
+        .map(|v| v == "0")
+        .unwrap_or(false)
+    {
+        info!("Daily earnings poster disabled via ENABLE_EARNINGS_PINGER=0");
+        return None;
+    }
+
+    let channel_id = match env::var("EARNINGS_CHANNEL_ID")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+    {
+        Some(id) => ChannelId::new(id),
+        None => {
+            info!("EARNINGS_CHANNEL_ID not set; daily earnings poster not started");
+            return None;
+        }
+    };
+
+    info!("Starting daily earnings poster to channel {}", channel_id);
+
+    Some(tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            if should_post_now().await {
+                if let Err(e) = send_daily_report(&http, &finance, channel_id).await {
+                    warn!("daily earnings poster iteration failed: {e}");
+                }
+            }
+        }
+    }))
+}
+
+async fn should_post_now() -> bool {
+    let now_utc = Utc::now();
+    let now_et = now_utc.with_timezone(&America::New_York);
+
+    // Only Mon–Fri at 6:00 PM ET (allow a small window to avoid missing the minute)
+    match now_et.weekday() {
+        Weekday::Sat | Weekday::Sun => return false,
+        _ => {}
+    }
+    if !(now_et.hour() == 18 && now_et.minute() < 5) {
+        return false;
+    }
+
+    let today = now_et.date_naive();
+    let mut last = LAST_DAILY_POST_DATE.lock().await;
+    if let Some(prev) = *last {
+        if prev == today {
+            return false;
+        }
+    }
+    *last = Some(today);
+    true
 }
 
 /// Send a daily earnings report for the current day (Mon–Fri).
@@ -56,10 +130,7 @@ pub async fn send_daily_report(
         .map_err(|e| format!("fetch error: {e}"))?;
 
     if events.is_empty() {
-        let msg = format!(
-            "No companies reporting earnings for ({})",
-            date_label
-        );
+        let msg = format!("No companies reporting earnings for ({})", date_label);
         channel_id
             .say(http, msg)
             .await
@@ -76,7 +147,8 @@ pub async fn send_daily_report(
 
     for ev in events {
         let session = classify_session(ev.time_of_day.as_deref());
-        let iv_snapshot = fetch_iv_snapshot(finance, &ev.symbol, ev.date.date_naive(), session).await;
+        let iv_snapshot =
+            fetch_iv_snapshot(finance, &ev.symbol, ev.date.date_naive(), session).await;
 
         match iv_snapshot {
             Some(iv) => lines.push(format!(
@@ -114,7 +186,11 @@ fn classify_session(time: Option<&str>) -> &'static str {
     if t.contains("bmo") || t.contains("before market") || t.contains("pre") {
         return "BMO";
     }
-    if t.contains("amc") || t.contains("after close") || t.contains("after market") || t.contains("post") {
+    if t.contains("amc")
+        || t.contains("after close")
+        || t.contains("after market")
+        || t.contains("post")
+    {
         return "AMC";
     }
 
@@ -136,7 +212,7 @@ fn classify_session(time: Option<&str>) -> &'static str {
         return "AMC";
     }
 
-        "TBA"
+    "TBA"
 }
 
 fn parse_hour_prefix(s: &str) -> Option<u32> {
@@ -149,9 +225,7 @@ fn parse_hour_prefix(s: &str) -> Option<u32> {
                 // Enough to form an hour like "09" or "16"
                 break;
             }
-        } else if ch == ':' {
-            break;
-        } else if !digits.is_empty() {
+        } else if ch == ':' || !digits.is_empty() {
             break;
         }
     }
@@ -193,13 +267,13 @@ async fn fetch_iv_snapshot(
         .map(|(exp, _)| exp)?;
 
     // Fetch options for that specific expiration
-    let slice = match finance
-        .get_option_slice(symbol, target_expiry, 5)
-        .await
-    {
+    let slice = match finance.get_option_slice(symbol, target_expiry, 5).await {
         Ok(s) => s,
         Err(e) => {
-            warn!("IV fetch failed for {} at expiry {:?}: {}", symbol, target_expiry, e);
+            warn!(
+                "IV fetch failed for {} at expiry {:?}: {}",
+                symbol, target_expiry, e
+            );
             return None;
         }
     };

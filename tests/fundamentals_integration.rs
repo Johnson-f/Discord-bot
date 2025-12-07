@@ -2,8 +2,8 @@ use finance_query_core::{FetchClient, YahooAuthManager, YahooFinanceClient};
 use serde_json::to_string_pretty;
 use std::sync::Arc;
 use std::{fs, path::Path};
-use Discord_bot::models::{Frequency, StatementType};
-use Discord_bot::service::finance::fundamentals::fetch_fundamentals_timeseries;
+use discord_bot::models::{Frequency, StatementType};
+use discord_bot::service::finance::fundamentals::fetch_fundamentals_timeseries;
 
 /// Integration test that hits the live Yahoo Finance API via finance-query-core.
 ///

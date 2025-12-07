@@ -1,0 +1,14 @@
+target
+.git
+.gitignore
+.idea
+.vscode
+.DS_Store
+node_modules
+.cargo
+.env
+.env.production
+.cursor
+.cursorignore
+terminal_files_information
+

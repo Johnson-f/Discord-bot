@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+    # No ports exposed; the bot initiates outbound connections only
+

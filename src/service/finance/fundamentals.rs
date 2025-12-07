@@ -116,7 +116,7 @@ pub fn reshape_timeseries_to_financial_statements(data: &Value) -> Vec<Financial
             let metric_map = fs
                 .statement
                 .entry(base_field.to_string())
-                .or_insert_with(HashMap::new);
+                .or_default();
 
             if let Some(items) = value.as_array() {
                 for (idx, item) in items.iter().enumerate() {

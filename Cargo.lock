@@ -3,33 +3,6 @@
 version = 4
 
 [[package]]
-name = "Discord-bot"
-version = "0.1.0"
-dependencies = [
- "ab_glyph",
- "anyhow",
- "base64 0.22.1",
- "chrono",
- "chrono-tz",
- "dotenv",
- "finance-query-core",
- "font-kit",
- "futures-util",
- "image",
- "imageproc",
- "once_cell",
- "reqwest 0.12.24",
- "serde",
- "serde_json",
- "serenity",
- "thiserror 2.0.17",
- "tokio",
- "tokio-tungstenite 0.28.0",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -798,6 +771,33 @@ dependencies = [
  "option-ext",
  "redox_users",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "discord-bot"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "chrono-tz",
+ "dotenv",
+ "finance-query-core",
+ "font-kit",
+ "futures-util",
+ "image",
+ "imageproc",
+ "once_cell",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
+ "serenity",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-tungstenite 0.28.0",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -4,15 +4,15 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use ab_glyph::{FontArc, PxScale};
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use chrono::{Datelike, NaiveDate, Timelike, Utc, Weekday};
 use chrono_tz::America::New_York;
 use font_kit::family_name::FamilyName;
 use font_kit::properties::{Properties, Weight};
 use font_kit::source::SystemSource;
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
 use image::imageops::{self, FilterType};
-use image::{DynamicImage, ImageFormat, GenericImageView, Rgba, RgbaImage};
+use image::{DynamicImage, GenericImageView, ImageFormat, Rgba, RgbaImage};
 use imageproc::drawing::{draw_filled_rect_mut, draw_text_mut, text_size};
 use imageproc::rect::Rect;
 use once_cell::sync::Lazy;
@@ -174,7 +174,7 @@ pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, 
     }
 
     let font = load_font()?;
-    
+
     // Extract and decode logos from events
     let logos = extract_logos_from_events(events)?;
 
@@ -187,25 +187,25 @@ pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, 
     Ok(buffer)
 }
 
-fn extract_logos_from_events(events: &[EarningsEvent]) -> Result<std::collections::HashMap<String, RgbaImage>, String> {
+fn extract_logos_from_events(
+    events: &[EarningsEvent],
+) -> Result<std::collections::HashMap<String, RgbaImage>, String> {
     use std::collections::HashMap;
-    
+
     let mut logos = HashMap::new();
-    
+
     for event in events {
         if let Some(ref logo_data) = event.logo {
             if let Some(base64_data) = logo_data.strip_prefix("data:image/png;base64,") {
                 match STANDARD.decode(base64_data) {
-                    Ok(decoded) => {
-                        match image::load_from_memory(&decoded) {
-                            Ok(img) => {
-                                logos.insert(event.symbol.clone(), fit_logo(&img));
-                            }
-                            Err(e) => {
-                                warn!("Failed to load logo for {}: {}", event.symbol, e);
-                            }
+                    Ok(decoded) => match image::load_from_memory(&decoded) {
+                        Ok(img) => {
+                            logos.insert(event.symbol.clone(), fit_logo(&img));
                         }
-                    }
+                        Err(e) => {
+                            warn!("Failed to load logo for {}: {}", event.symbol, e);
+                        }
+                    },
                     Err(e) => {
                         warn!("Failed to decode base64 logo for {}: {}", event.symbol, e);
                     }
@@ -213,41 +213,41 @@ fn extract_logos_from_events(events: &[EarningsEvent]) -> Result<std::collection
             }
         }
     }
-    
+
     info!("Loaded {} logos from API", logos.len());
     Ok(logos)
 }
 
 fn load_font() -> Result<FontArc, String> {
     let source = SystemSource::new();
-    
+
     let handle = source
         .select_best_match(
             &[FamilyName::SansSerif],
-            &Properties::new().weight(Weight::BOLD)
+            Properties::new().weight(Weight::BOLD),
         )
         .map_err(|e| format!("Failed to find system font: {}", e))?;
-    
+
     let font = handle
         .load()
         .map_err(|e| format!("Failed to load font: {}", e))?;
-    
+
     let font_data = font
         .copy_font_data()
         .ok_or_else(|| "Failed to copy font data".to_string())?
         .to_vec();
-    
+
     FontArc::try_from_vec(font_data)
         .map_err(|_| "Failed to create FontArc from system font".to_string())
 }
 
 fn fit_logo(img: &DynamicImage) -> RgbaImage {
     let (w, h) = img.dimensions();
-    
+
     let scale = (LOGO_W as f32 / w as f32)
         .min(LOGO_H as f32 / h as f32)
         .min(1.5);
-    
+
     let new_w = (w as f32 * scale).max(1.0).round() as u32;
     let new_h = (h as f32 * scale).max(1.0).round() as u32;
     let resized: RgbaImage = imageops::resize(img, new_w, new_h, FilterType::Lanczos3);
@@ -293,7 +293,7 @@ fn draw_canvas(
         .max()
         .unwrap_or(0)
         .min(MAX_PER_COLUMN);
-    
+
     let height = MARGIN + HEADER_HEIGHT + (max_entries as u32 * ENTRY_HEIGHT) + MARGIN;
 
     let mut img = RgbaImage::from_pixel(width, height, CANVAS_BG);
@@ -301,7 +301,7 @@ fn draw_canvas(
     for (idx, column) in columns.iter().enumerate() {
         let x = MARGIN + idx as u32 * (DAY_WIDTH + DIVIDER_WIDTH);
         draw_day_column(&mut img, x, MARGIN, column, font, logos);
-        
+
         if idx < columns.len() - 1 {
             let divider_x = x + DAY_WIDTH;
             let divider_rect = Rect::at(divider_x as i32, MARGIN as i32)
@@ -321,14 +321,18 @@ fn draw_day_column(
     font: &FontArc,
     logos: &std::collections::HashMap<String, RgbaImage>,
 ) {
-    let max_entries = column.before.len().max(column.after.len()).min(MAX_PER_COLUMN);
+    let max_entries = column
+        .before
+        .len()
+        .max(column.after.len())
+        .min(MAX_PER_COLUMN);
     let col_height = HEADER_HEIGHT + (max_entries as u32 * ENTRY_HEIGHT);
     let bg_rect = Rect::at(x as i32, y as i32).of_size(DAY_WIDTH, col_height);
     draw_filled_rect_mut(img, bg_rect, COLUMN_BG);
 
     let day_label = column.date.weekday().to_string();
     let date_label = column.date.format("%b %e").to_string();
-    
+
     draw_centered_text(
         img,
         font,
@@ -374,7 +378,14 @@ fn draw_day_column(
 
     let entry_start_y = y + HEADER_HEIGHT;
     draw_half_column(img, font, x, entry_start_y, &column.before, logos);
-    draw_half_column(img, font, x + HALF_WIDTH, entry_start_y, &column.after, logos);
+    draw_half_column(
+        img,
+        font,
+        x + HALF_WIDTH,
+        entry_start_y,
+        &column.after,
+        logos,
+    );
 }
 
 fn draw_half_column(
@@ -435,10 +446,20 @@ fn draw_half_column(
 fn placeholder_logo(symbol: &str, font: &FontArc) -> RgbaImage {
     // Transparent background so logos are not placed on a card
     let mut img = RgbaImage::from_pixel(LOGO_W, LOGO_H, Rgba([0, 0, 0, 0]));
-    draw_centered_text(&mut img, font, symbol, PxScale::from(18.0), 0, LOGO_W, (LOGO_H / 2) - 12, HEADER_COLOR);
+    draw_centered_text(
+        &mut img,
+        font,
+        symbol,
+        PxScale::from(18.0),
+        0,
+        LOGO_W,
+        (LOGO_H / 2) - 12,
+        HEADER_COLOR,
+    );
     img
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_centered_text(
     img: &mut RgbaImage,
     font: &FontArc,
@@ -452,7 +473,15 @@ fn draw_centered_text(
     let (tw, th) = text_size(scale, font, text);
     let offset_x = x as i32 + ((width as i32 - tw as i32) / 2);
     let offset_y = y as i32;
-    draw_text_mut(img, color, offset_x, offset_y + th as i32, scale, font, text);
+    draw_text_mut(
+        img,
+        color,
+        offset_x,
+        offset_y + th as i32,
+        scale,
+        font,
+        text,
+    );
 }
 
 fn classify_session(time: Option<&str>) -> Session {

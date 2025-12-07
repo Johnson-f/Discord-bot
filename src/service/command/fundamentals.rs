@@ -167,7 +167,7 @@ pub async fn handle(
         return Err("quarter can only be used with quarterly frequency".into());
     }
 
-    let quarter_num = quarter.as_deref().and_then(|q| match q {
+    let quarter_num = quarter.and_then(|q| match q {
         "Q1" => Some(1),
         "Q2" => Some(2),
         "Q3" => Some(3),

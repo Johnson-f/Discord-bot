@@ -1,7 +1,7 @@
 use chrono::{Datelike, Duration, Utc, Weekday};
 use chrono_tz::America::New_York;
-use std::time::Duration as StdDuration;
 use serenity::all::{CommandInteraction, CreateCommand, Http};
+use std::time::Duration as StdDuration;
 use tokio::time::timeout;
 use tracing::{error, info, warn};
 
@@ -9,7 +9,10 @@ use crate::models::EarningsEvent;
 use crate::service::automation::earnings;
 use crate::service::finance::FinanceService;
 
-fn week_range_mon_fri(weekday: Weekday, today: chrono::NaiveDate) -> (chrono::NaiveDate, chrono::NaiveDate) {
+fn week_range_mon_fri(
+    weekday: Weekday,
+    today: chrono::NaiveDate,
+) -> (chrono::NaiveDate, chrono::NaiveDate) {
     // Monday is 0, Sunday is 6
     let days_from_mon = weekday.num_days_from_monday() as i64;
     let monday = if weekday == Weekday::Sun {
@@ -28,11 +31,16 @@ pub struct EarningsResponse {
 }
 
 pub fn register_weekly_command() -> CreateCommand {
-    CreateCommand::new("weekly-earnings").description("Next 7 days of earnings for watchlist symbols")
+    CreateCommand::new("weekly-earnings").description("Weekly earnings calendar")
 }
 
 pub fn register_daily_command() -> CreateCommand {
-    CreateCommand::new("daily-earnings").description("Today's earnings with implied move snapshot")
+    CreateCommand::new("daily-earnings").description("Today's earnings calendar with implied move")
+}
+
+pub fn register_after_daily_command() -> CreateCommand {
+    CreateCommand::new("er-reports")
+        .description("Post-earnings reports for companies just announcing their numbers")
 }
 
 pub async fn handle_weekly(
@@ -133,6 +141,19 @@ pub async fn handle_daily(
 ) -> Result<String, String> {
     earnings::send_daily_report(http, finance, command.channel_id).await?;
     Ok("Posted today's earnings report to this channel.".to_string())
+}
+
+/// Manually trigger the post-earnings report for today.
+/// - Before 4pm ET: BMO actuals
+/// - After 6pm ET: AMC actuals
+/// - Between 4–6pm ET: posts a waiting message
+pub async fn handle_after_daily(
+    command: &CommandInteraction,
+    finance: &FinanceService,
+    http: &Http,
+) -> Result<String, String> {
+    earnings::send_after_daily_report(http, finance, command.channel_id).await?;
+    Ok("Posted today's post-earnings report to this channel.".to_string())
 }
 
 pub fn format_output(events: &[EarningsEvent]) -> String {

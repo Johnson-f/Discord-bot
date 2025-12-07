@@ -9,11 +9,13 @@ use crate::models::EarningsEvent;
 use crate::service::finance::FinanceServiceError;
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ApiDateGroup {
     stocks: Vec<ApiEarning>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ApiResponse {
     success: bool,
     date_from: Option<String>,
@@ -24,6 +26,7 @@ struct ApiResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ApiEarning {
     importance: Option<i64>,
     symbol: String,
@@ -31,7 +34,7 @@ struct ApiEarning {
     time: Option<String>,
     title: Option<String>,
     emoji: Option<String>,
-    logo: Option<String>,  // Added logo field
+    logo: Option<String>, // Added logo field
 }
 
 const EARNINGS_API_URL: &str =
@@ -60,7 +63,7 @@ pub async fn fetch_earnings_range(
         .query(&[
             ("fromDate", from_str.as_str()),
             ("toDate", to_str.as_str()),
-            ("includeLogos", "true"),  // Request logos from API
+            ("includeLogos", "true"), // Request logos from API
         ])
         .header("Authorization", format!("Bearer {}", EARNINGS_API_BEARER))
         .send()
@@ -129,7 +132,7 @@ pub async fn fetch_earnings_range(
                 importance: s.importance,
                 title: s.title,
                 emoji: s.emoji,
-                logo: s.logo,  // Include logo data from API
+                logo: s.logo, // Include logo data from API
             });
         }
     }
