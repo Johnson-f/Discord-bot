@@ -30,6 +30,23 @@ static LAST_AFTER_BMO_POST_DATE: Lazy<Mutex<Option<chrono::NaiveDate>>> =
 static LAST_AFTER_AMC_POST_DATE: Lazy<Mutex<Option<chrono::NaiveDate>>> =
     Lazy::new(|| Mutex::new(None));
 
+fn resolve_channel_id(var_names: &[&str], feature_label: &str) -> Option<ChannelId> {
+    for name in var_names {
+        if let Ok(value) = env::var(name) {
+            match value.parse::<u64>() {
+                Ok(id) => return Some(ChannelId::new(id)),
+                Err(_) => warn!("{feature_label}: {name} is set but not a valid u64 channel id"),
+            }
+        }
+    }
+
+    info!(
+        "{feature_label} not started; set one of these env vars: {:?}",
+        var_names
+    );
+    None
+}
+
 /// Spawn post-earnings snapshots twice daily:
 /// - BMO: 8:45 AM ET
 /// - AMC: 5:50 PM ET
@@ -45,15 +62,12 @@ pub fn spawn_after_daily_poster(
         return None;
     }
 
-    let channel_id = match env::var("EARNINGS_CHANNEL_ID")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-    {
-        Some(id) => ChannelId::new(id),
-        None => {
-            info!("EARNINGS_CHANNEL_ID not set; after-daily poster not started");
-            return None;
-        }
+    let channel_id = match resolve_channel_id(
+        &["EARNINGS_AFTER_CHANNEL_ID", "EARNINGS_CHANNEL_ID"],
+        "after-daily earnings poster",
+    ) {
+        Some(id) => id,
+        None => return None,
     };
 
     info!(

@@ -10,4 +10,5 @@ This repo will contain the codes of a Discord bot for the financial markets for 
 
 ## Earnings features
 - Slash command `earnings` returns the next 7 days of earnings for the watchlist symbols.
-- Scheduled poster (daily ~13:00 UTC) posts to `EARNINGS_CHANNEL_ID`; enable unless `ENABLE_EARNINGS_PINGER=0`.
+- Scheduled posters default to `EARNINGS_CHANNEL_ID`; override per job with `EARNINGS_WEEKLY_CHANNEL_ID` (weekly calendar), `EARNINGS_DAILY_CHANNEL_ID` (daily IV/IM at 6pm ET), and `EARNINGS_AFTER_CHANNEL_ID` (post-earnings snapshots).
+- Options pinger posts SPY slices to `OPTIONS_CHANNEL_ID`; disable with `ENABLE_OPTIONS_PINGER=0`.
