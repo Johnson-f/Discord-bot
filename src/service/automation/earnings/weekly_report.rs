@@ -58,13 +58,10 @@ pub fn spawn_earnings_poster(
         return None;
     }
 
-    let channel_id = match resolve_channel_id(
+    let channel_id = resolve_channel_id(
         &["EARNINGS_WEEKLY_CHANNEL_ID", "EARNINGS_CHANNEL_ID"],
         "earnings poster",
-    ) {
-        Some(id) => id,
-        None => return None,
-    };
+    )?;
 
     info!("Starting weekly earnings poster to channel {}", channel_id);
 

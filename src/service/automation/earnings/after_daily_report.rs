@@ -62,13 +62,10 @@ pub fn spawn_after_daily_poster(
         return None;
     }
 
-    let channel_id = match resolve_channel_id(
+    let channel_id = resolve_channel_id(
         &["EARNINGS_AFTER_CHANNEL_ID", "EARNINGS_CHANNEL_ID"],
         "after-daily earnings poster",
-    ) {
-        Some(id) => id,
-        None => return None,
-    };
+    )?;
 
     info!(
         "Starting after-daily earnings poster to channel {}",
