@@ -4,22 +4,22 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-serenity = { version = "0.12.4", default-features = false, features = [
-    "builder",           
-    "cache",         
-    "collector",  
-    "client",            
-    "framework",            
-    "gateway",      
-    "http", 
-    "model",           
-    "standard_framework",        
-    "utils",            
-    "voice",            
+serenity = { workspace = true, default-features = false, features = [
+    "builder",
+    "cache",
+    "collector",
+    "client",
+    "framework",
+    "gateway",
+    "http",
+    "model",
+    "standard_framework",
+    "utils",
+    "voice",
     "rustls_backend",
 ] }
 # Async runtime with all features
-tokio = { version = "1.48.0", features = [
+tokio = { workspace = true, features = [
     "macros",           # Async macros like #[tokio::main]
     "rt-multi-thread",  # Multi-threaded runtime
     "time",             # Time utilities for delays/intervals
@@ -27,12 +27,12 @@ tokio = { version = "1.48.0", features = [
     "fs",               # Async file operations
 ] }
 
-dotenvy = "0.15.7"
-tracing = "0.1.43"
-tracing-subscriber = { version = "0.3.22", features = ["fmt", "env-filter"] }
-finance-query-core = "0.3.0"
-chrono = { version = "0.4.42", features = ["serde", "clock"] }
-futures-util = "0.3.31"
+dotenvy = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["fmt", "env-filter"] }
+finance-query-core = { workspace = true }
+chrono = { workspace = true, features = ["serde", "clock"] }
+futures-util = { workspace = true }
 
 [[test]]
 name = "price_stream"

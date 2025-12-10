@@ -7,15 +7,13 @@ use serenity::all::{CreateAttachment, Http};
 use serenity::model::prelude::ChannelId;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
+use crate::service::caching::collections::spy_data as cache_spy;
+use crate::service::caching::RedisCache;
 use crate::service::finance::options::OptionSlice;
 use crate::service::finance::FinanceService;
 
-#[allow(clippy::type_complexity)]
-static STRIKE_HISTORY: once_cell::sync::Lazy<
-    Mutex<HashMap<String, Vec<(chrono::DateTime<Utc>, f64)>>>,
-> = once_cell::sync::Lazy::new(|| Mutex::new(HashMap::new()));
 static LAST_RUN: once_cell::sync::Lazy<Mutex<Option<chrono::DateTime<Utc>>>> =
     once_cell::sync::Lazy::new(|| Mutex::new(None));
 
@@ -23,6 +21,7 @@ static LAST_RUN: once_cell::sync::Lazy<Mutex<Option<chrono::DateTime<Utc>>>> =
 pub fn spawn_options_pinger(
     http: Arc<Http>,
     finance: Arc<FinanceService>,
+    cache: Option<Arc<RedisCache>>,
 ) -> Option<JoinHandle<()>> {
     if env::var("ENABLE_OPTIONS_PINGER")
         .map(|v| v == "0")
@@ -44,13 +43,14 @@ pub fn spawn_options_pinger(
     };
 
     info!("Starting options pinger for SPY to channel {}", channel_id);
+    let cache = cache.clone();
 
     Some(tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60));
         loop {
             interval.tick().await;
             if should_run_now().await {
-                if let Err(e) = post_once(&http, &finance, channel_id).await {
+                if let Err(e) = post_once(&http, &finance, cache.as_deref(), channel_id).await {
                     error!("options pinger iteration failed: {e}");
                 }
             }
@@ -61,6 +61,7 @@ pub fn spawn_options_pinger(
 async fn post_once(
     http: &Http,
     finance: &FinanceService,
+    cache: Option<&RedisCache>,
     channel_id: ChannelId,
 ) -> Result<(), String> {
     let slice = finance
@@ -68,8 +69,33 @@ async fn post_once(
         .await
         .map_err(|e| e.to_string())?;
 
+    let history = if let Some(cache) = cache {
+        if let Err(err) = cache_spy::append_slice(cache, &slice).await {
+            warn!("failed to append slice to redis history: {err}");
+            None
+        } else {
+            match cache_spy::load_history(
+                cache,
+                &slice.expiration,
+                cache_spy::DEFAULT_HISTORY_POINTS,
+            )
+            .await
+            {
+                Ok(map) => Some(map),
+                Err(err) => {
+                    warn!("failed to load slice history from redis: {err}");
+                    None
+                }
+            }
+        }
+    } else {
+        None
+    };
+
+    let history = history.unwrap_or_else(|| cache_spy::history_from_slice(&slice));
+
     let summary = format_slice(&slice);
-    match build_chart_bytes(&slice).await {
+    match build_chart_bytes(&slice, &history).await {
         Ok(bytes) => {
             let attachment = CreateAttachment::bytes(bytes, "spy_options.png");
             let builder = serenity::builder::CreateMessage::new()
@@ -133,54 +159,48 @@ fn fmt_side(contracts: &[OptionContract]) -> String {
     lines.join("\n")
 }
 
-async fn record_slice(slice: &OptionSlice) {
-    let mut map = STRIKE_HISTORY.lock().await;
-    let now = Utc::now();
-    for c in slice.calls.iter().chain(slice.puts.iter()) {
-        let price = c.last_price;
-        let key = format!("{:.2}", c.strike);
-        let hist = map.entry(key).or_default();
-        hist.push((now, price));
-        if hist.len() > 200 {
-            let drop = hist.len() - 200;
-            hist.drain(0..drop);
-        }
-    }
-}
+async fn build_chart_bytes(
+    slice: &OptionSlice,
+    history: &HashMap<String, Vec<(chrono::DateTime<Utc>, f64)>>,
+) -> Result<Vec<u8>, String> {
+    let mut strikes: Vec<_> = history.keys().cloned().collect();
+    strikes.sort_by(|a, b| {
+        let fa = a.parse::<f64>().unwrap_or(0.0);
+        let fb = b.parse::<f64>().unwrap_or(0.0);
+        fa.partial_cmp(&fb).unwrap_or(std::cmp::Ordering::Equal)
+    });
 
-async fn build_chart_bytes(slice: &OptionSlice) -> Result<Vec<u8>, String> {
-    // Record history first
-    record_slice(slice).await;
-
-    let map = STRIKE_HISTORY.lock().await;
-    let mut datasets = Vec::new();
-    // assign distinct colors per strike
     let palette = [
         "#4caf50", "#f44336", "#2196f3", "#ff9800", "#9c27b0", "#00bcd4", "#8bc34a", "#ff5722",
         "#3f51b5", "#cddc39",
     ];
+    let mut datasets = Vec::new();
     let mut idx = 0usize;
 
-    for (strike, points) in map.iter() {
-        if points.len() < 2 {
-            continue;
+    for strike in strikes {
+        if let Some(points) = history.get(&strike) {
+            if points.is_empty() {
+                continue;
+            }
+            let data: Vec<_> = points
+                .iter()
+                .map(|(t, p)| serde_json::json!({"x": t.to_rfc3339(), "y": p}))
+                .collect();
+            if data.is_empty() {
+                continue;
+            }
+            let color = palette[idx % palette.len()];
+            idx += 1;
+            datasets.push(serde_json::json!({
+                "label": format!("K {}", strike),
+                "data": data,
+                "showLine": true,
+                "tension": 0.2,
+                "borderColor": color,
+                "backgroundColor": format!("{}33", color), // semi-transparent
+            }));
         }
-        let data: Vec<_> = points
-            .iter()
-            .map(|(t, p)| serde_json::json!({"x": t.to_rfc3339(), "y": p}))
-            .collect();
-        let color = palette[idx % palette.len()];
-        idx += 1;
-        datasets.push(serde_json::json!({
-            "label": format!("K {}", strike),
-            "data": data,
-            "showLine": true,
-            "tension": 0.2,
-            "borderColor": color,
-            "backgroundColor": format!("{}33", color), // semi-transparent
-        }));
     }
-    drop(map);
 
     if datasets.is_empty() {
         return Err("no historical data to chart yet".into());

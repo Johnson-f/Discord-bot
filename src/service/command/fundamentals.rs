@@ -227,7 +227,7 @@ pub async fn handle_text(
         Frequency::Quarterly => "quarterly",
     };
 
-    let mut response = format!(
+    let response = format!(
         "{} ({}) for {} {}on {}: {}",
         metric.label,
         freq_label,

@@ -14,6 +14,7 @@ use tracing::info;
 
 use discord_bot::models::StatementType;
 use discord_bot::service::automation::{earnings, options_data};
+use discord_bot::service::caching::RedisCache;
 use discord_bot::service::command::earnings as earnings_cmd;
 use discord_bot::service::command::fundamentals as fundamentals_cmd;
 use discord_bot::service::command::holders as holders_cmd;
@@ -24,6 +25,7 @@ use discord_bot::service::finance::FinanceService;
 
 struct Handler {
     finance: Arc<FinanceService>,
+    cache: Option<Arc<RedisCache>>,
 }
 
 #[async_trait]
@@ -109,7 +111,7 @@ impl EventHandler for Handler {
         }
 
         // Start SPY options pinger (every 15 minutes) if configured
-        options_data::spawn_options_pinger(ctx.http.clone(), self.finance.clone());
+        options_data::spawn_options_pinger(ctx.http.clone(), self.finance.clone(), self.cache.clone());
         // Start daily earnings poster
         earnings::spawn_earnings_poster(ctx.http.clone(), self.finance.clone());
         // Start daily earnings (IV/IM) poster at 6pm ET
@@ -395,10 +397,25 @@ async fn main() -> Result<()> {
     info!("Initializing FinanceService...");
     let finance = Arc::new(FinanceService::new(None)?);
 
+    info!("Initializing Redis cache (optional)...");
+    let cache = match RedisCache::from_env().await {
+        Ok(c) => {
+            info!("Connected to Redis cache");
+            Some(Arc::new(c))
+        }
+        Err(err) => {
+            info!("Redis cache disabled: {err}");
+            None
+        }
+    };
+
     info!("Starting Discord client...");
     let mut client = Client::builder(token, intents)
         .application_id(app_id)
-        .event_handler(Handler { finance })
+        .event_handler(Handler {
+            finance,
+            cache,
+        })
         .await?;
 
     if let Err(why) = client.start().await {
