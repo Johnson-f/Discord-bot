@@ -4,6 +4,14 @@ use serenity::all::{
     CreateCommandOption,
 };
 
+use ab_glyph::{FontArc, PxScale};
+use font_kit::family_name::FamilyName;
+use font_kit::properties::{Properties, Weight};
+use font_kit::source::SystemSource;
+use image::{ImageFormat, Rgba, RgbaImage};
+use imageproc::drawing::draw_text_mut;
+use std::io::Cursor;
+
 use crate::models::{Frequency, StatementType};
 use crate::service::finance::{
     fundamentals::{reshape_timeseries_to_financial_statements, FETCH_YEARS_DEFAULT},
@@ -305,6 +313,195 @@ pub async fn handle_text(
     } else {
         Ok(format!("{} (adjusted: {})", response, corrections.join(", ")))
     }
+}
+
+pub async fn render_statement_image(
+    finance: &FinanceService,
+    statement_type: StatementType,
+    ticker: &str,
+    freq_val: &str,
+    year: Option<i32>,
+    quarter: Option<&str>,
+) -> Result<(String, Vec<u8>), String> {
+    let (freq, _) = normalize_freq(freq_val);
+
+    let quarter_num = quarter.and_then(|q| match q {
+        "Q1" => Some(1),
+        "Q2" => Some(2),
+        "Q3" => Some(3),
+        "Q4" => Some(4),
+        _ => None,
+    });
+    let quarter_num = match freq {
+        Frequency::Annual => None,
+        Frequency::Quarterly => quarter_num,
+    };
+
+    let years_back = year
+        .map(|y| {
+            let current_year = Utc::now().year();
+            (current_year - y + 1).max(FETCH_YEARS_DEFAULT as i32) as i64
+        })
+        .unwrap_or(FETCH_YEARS_DEFAULT);
+
+    let raw = finance
+        .get_fundamentals_raw(ticker, statement_type, freq, years_back)
+        .await
+        .map_err(|e| format!("fetch error: {e}"))?;
+
+    let statements = reshape_timeseries_to_financial_statements(&raw);
+    let (date, rows) = select_statement_rows(
+        &statements,
+        statement_type,
+        freq,
+        year,
+        quarter_num,
+    )
+    .ok_or_else(|| "no matching data for the requested filters".to_string())?;
+
+    let freq_label = match freq {
+        Frequency::Annual => "annual",
+        Frequency::Quarterly => "quarterly",
+    };
+
+    let title = format!(
+        "{} ({}) for {} on {}",
+        match statement_type {
+            StatementType::IncomeStatement => "Income Statement",
+            StatementType::BalanceSheet => "Balance Sheet",
+            StatementType::CashFlow => "Cash Flow",
+        },
+        freq_label,
+        ticker.to_uppercase(),
+        date
+    );
+
+    let image = render_rows_image(&title, &rows)?;
+    Ok((title, image))
+}
+
+fn select_statement_rows(
+    statements: &[crate::models::FinancialStatement],
+    statement_type: StatementType,
+    frequency: Frequency,
+    year: Option<i32>,
+    quarter: Option<u32>,
+) -> Option<(String, Vec<(String, String)>)> {
+    let freq_str = match frequency {
+        Frequency::Annual => "annual",
+        Frequency::Quarterly => "quarterly",
+    };
+
+    let stmt = statements
+        .iter()
+        .find(|s| s.statement_type == statement_type.as_str() && s.frequency == freq_str)?;
+
+    // Choose the best date entry based on year/quarter filters
+    let mut best: Option<(NaiveDate, String)> = None;
+    for (date_str, _val) in stmt.statement.values().next()?.iter() {
+        if let Ok(nd) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+            if let Some(y) = year {
+                if nd.year() != y {
+                    continue;
+                }
+            }
+            if let Some(q) = quarter {
+                let month = nd.month();
+                let q_calc = ((month - 1) / 3) + 1;
+                if q_calc != q {
+                    continue;
+                }
+            }
+            match &best {
+                Some((best_date, _)) if nd <= *best_date => {}
+                _ => best = Some((nd, date_str.clone())),
+            }
+        }
+    }
+
+    let (_, best_date) = best?;
+
+    // Build rows for the selected date
+    let mut rows = Vec::new();
+    for (metric, series) in stmt.statement.iter() {
+        if let Some(val) = series.get(&best_date) {
+            let display = extract_display(val);
+            rows.push((metric.clone(), display));
+        }
+    }
+
+    // Sort rows alphabetically for consistency and cap to avoid huge images
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    rows.truncate(40);
+
+    Some((best_date, rows))
+}
+
+fn render_rows_image(title: &str, rows: &[(String, String)]) -> Result<Vec<u8>, String> {
+    let font = load_font()?;
+    let header_scale = PxScale::from(28.0);
+    let row_scale = PxScale::from(20.0);
+
+    let margin = 24;
+    let line_h = 30;
+    let width = 1200;
+    let height = margin * 2 + 50 + rows.len() as u32 * line_h;
+
+    let mut img = RgbaImage::from_pixel(width, height, Rgba([255, 255, 255, 255]));
+
+    draw_text_mut(
+        &mut img,
+        Rgba([40, 40, 40, 255]),
+        margin as i32,
+        margin as i32,
+        header_scale,
+        &font,
+        title,
+    );
+
+    let mut y = margin + 50;
+    for (metric, value) in rows {
+        let line = format!("{}: {}", to_title(metric), value);
+        draw_text_mut(
+            &mut img,
+            Rgba([60, 60, 60, 255]),
+            margin as i32,
+            y as i32,
+            row_scale,
+            &font,
+            &line,
+        );
+        y += line_h;
+    }
+
+    let mut buffer = Vec::new();
+    image::DynamicImage::ImageRgba8(img)
+        .write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png)
+        .map_err(|e| format!("failed to encode png: {e}"))?;
+
+    Ok(buffer)
+}
+
+fn load_font() -> Result<FontArc, String> {
+    let source = SystemSource::new();
+
+    let handle = source
+        .select_best_match(
+            &[FamilyName::SansSerif],
+            Properties::new().weight(Weight::BOLD),
+        )
+        .map_err(|e| format!("Failed to find system font: {}", e))?;
+
+    let font = handle
+        .load()
+        .map_err(|e| format!("Failed to load font: {}", e))?;
+
+    let font_data = font
+        .copy_font_data()
+        .ok_or_else(|| "Failed to copy font data".to_string())?
+        .to_vec();
+
+    FontArc::try_from_vec(font_data).map_err(|_| "Failed to create FontArc from system font".into())
 }
 
 fn select_metric(

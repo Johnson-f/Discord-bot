@@ -6,8 +6,8 @@ use anyhow::Result;
 use dotenv::dotenv;
 use serenity::all::{
     ApplicationId, Command, CreateAttachment, CreateCommand, CreateInteractionResponse,
-    CreateInteractionResponseMessage, CreateMessage, EditAttachments, GatewayIntents, GuildId,
-    Interaction, Message,
+    CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditMessage, GatewayIntents,
+    GuildId, Interaction, Message,
 };
 use serenity::{async_trait, model::gateway::Ready, prelude::*, Client};
 use tracing::info;
@@ -335,11 +335,30 @@ impl EventHandler for Handler {
 
         match mention_cmd::handle(rest, &ctx.http, msg.channel_id, &self.finance).await {
             Ok(resp) => {
-                let mut builder = CreateMessage::new().content(resp.content);
+                // Send a placeholder message immediately, then edit with the real response.
+                let mut placeholder = match msg
+                    .channel_id
+                    .send_message(&ctx.http, CreateMessage::new().content("Stacks-bot thinking…"))
+                    .await
+                {
+                    Ok(m) => m,
+                    Err(err) => {
+                        let _ = msg.reply(&ctx.http, format!("❌ {}", err)).await;
+                        return;
+                    }
+                };
+
+                let mut edit = EditMessage::new().content(resp.content);
                 if let Some(attachment) = resp.attachment {
-                    builder = builder.add_file(attachment);
+                    let attachments = EditAttachments::new().add(attachment);
+                    edit = edit.attachments(attachments);
                 }
-                let _ = msg.channel_id.send_message(&ctx.http, builder).await;
+
+                if let Err(err) = placeholder.edit(&ctx.http, edit).await {
+                    let _ = msg
+                        .reply(&ctx.http, format!("❌ failed to edit message: {}", err))
+                        .await;
+                }
             }
             Err(err) => {
                 let _ = msg.reply(&ctx.http, format!("❌ {}", err)).await;

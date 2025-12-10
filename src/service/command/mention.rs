@@ -2,14 +2,9 @@ use serenity::all::{ChannelId, CreateAttachment, Http};
 
 use crate::models::StatementType;
 use crate::service::finance::FinanceService;
+use crate::service::command::fundamentals::render_statement_image;
 
-use super::{
-    earnings,
-    fundamentals,
-    holders,
-    news,
-    quotes,
-};
+use super::{earnings, holders, news, quotes};
 
 pub struct MentionResponse {
     pub content: String,
@@ -70,8 +65,7 @@ pub async fn handle(
             })
         }
         "income" | "balance" | "cashflow" => {
-            let ticker = parts.next().ok_or("ticker required, e.g., income AAPL revenue annual")?;
-            let metric = parts.next().ok_or("metric required (see slash choices)")?;
+            let ticker = parts.next().ok_or("ticker required, e.g., income AAPL annual")?;
             let freq = parts.next().ok_or("freq required: annual|quarterly")?;
             let year = parts
                 .next()
@@ -87,20 +81,14 @@ pub async fn handle(
                 _ => unreachable!(),
             };
 
-            let content = fundamentals::handle_text(
-                finance,
-                statement_type,
-                ticker,
-                &metric.to_ascii_lowercase(),
-                &freq.to_ascii_lowercase(),
-                year,
-                quarter,
-            )
-            .await?;
+            let (content, image) =
+                render_statement_image(finance, statement_type, ticker, freq, year, quarter).await?;
+
+            let attachment = CreateAttachment::bytes(image, "fundamentals.png");
 
             Ok(MentionResponse {
                 content,
-                attachment: None,
+                attachment: Some(attachment),
             })
         }
         "earnings" => {
@@ -143,7 +131,7 @@ pub async fn handle(
 }
 
 pub fn help_text() -> &'static str {
-    "Usage: @Bot quote TICKER | holders TICKER TYPE [LIMIT] | news TICKER [LIMIT] | income|balance|cashflow TICKER METRIC FREQ [YEAR] [QUARTER] | earnings weekly|daily|reports"
+    "Usage: @Bot quote TICKER | holders TICKER TYPE [LIMIT] | news TICKER [LIMIT] | income|balance|cashflow TICKER FREQ [YEAR] [QUARTER] | earnings weekly|daily|reports"
 }
 
 fn parse_usize(raw: &str) -> Result<usize, std::num::ParseIntError> {
