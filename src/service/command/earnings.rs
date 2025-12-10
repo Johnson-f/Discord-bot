@@ -43,6 +43,27 @@ pub fn register_after_daily_command() -> CreateCommand {
         .description("Post-earnings reports for companies just announcing their numbers")
 }
 
+/// Mention helpers (text entrypoints)
+pub async fn handle_weekly_mention(finance: &FinanceService) -> Result<EarningsResponse, String> {
+    handle_weekly_plain(finance).await
+}
+
+pub async fn handle_daily_mention(
+    finance: &FinanceService,
+    http: &Http,
+    channel_id: ChannelId,
+) -> Result<String, String> {
+    handle_daily_for_channel(finance, http, channel_id).await
+}
+
+pub async fn handle_after_daily_mention(
+    finance: &FinanceService,
+    http: &Http,
+    channel_id: ChannelId,
+) -> Result<String, String> {
+    handle_after_daily_for_channel(finance, http, channel_id).await
+}
+
 pub async fn handle_weekly(
     _command: &CommandInteraction,
     finance: &FinanceService,

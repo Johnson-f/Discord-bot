@@ -68,6 +68,58 @@ fn to_title(name: &str) -> String {
         .join(" ")
 }
 
+fn normalize_metric_value(
+    statement_type: StatementType,
+    raw: &str,
+) -> Result<(MetricSpec, bool), String> {
+    let metrics = get_metrics_for_statement(statement_type);
+    let norm = raw.trim().to_ascii_lowercase().replace(' ', "_");
+
+    // Exact / common-case matches first
+    if let Some(m) = metrics.iter().find(|m| m.slash_value == norm) {
+        return Ok((m.clone(), false));
+    }
+    if let Some(m) = metrics
+        .iter()
+        .find(|m| m.field_key.to_ascii_lowercase() == norm)
+    {
+        return Ok((m.clone(), true));
+    }
+    if let Some(m) = metrics
+        .iter()
+        .find(|m| m.label.to_ascii_lowercase() == norm.replace('_', " "))
+    {
+        return Ok((m.clone(), true));
+    }
+
+    // Prefix/substring heuristic
+    if let Some(m) = metrics.iter().find(|m| {
+        m.slash_value.starts_with(&norm)
+            || m.field_key.to_ascii_lowercase().starts_with(&norm)
+            || m.label.to_ascii_lowercase().starts_with(&norm.replace('_', " "))
+    }) {
+        return Ok((m.clone(), true));
+    }
+    if let Some(m) = metrics.iter().find(|m| {
+        m.slash_value.contains(&norm)
+            || m.field_key.to_ascii_lowercase().contains(&norm)
+            || m.label.to_ascii_lowercase().contains(&norm.replace('_', " "))
+    }) {
+        return Ok((m.clone(), true));
+    }
+
+    Err("unknown metric".into())
+}
+
+fn normalize_freq(raw: &str) -> (Frequency, bool) {
+    let norm = raw.trim().to_ascii_lowercase();
+    match norm.as_str() {
+        "annual" => (Frequency::Annual, false),
+        "quarterly" => (Frequency::Quarterly, false),
+        _ => (Frequency::Annual, true), // default to annual if unrecognized
+    }
+}
+
 pub fn register_command(statement_type: StatementType) -> CreateCommand {
     let (cmd_name, description) = match statement_type {
         StatementType::IncomeStatement => (
@@ -172,20 +224,22 @@ pub async fn handle_text(
     year: Option<i32>,
     quarter: Option<&str>,
 ) -> Result<String, String> {
-    let metrics = get_metrics_for_statement(statement_type);
-    let metric = metrics
-        .iter()
-        .find(|m| m.slash_value == metric_val)
-        .ok_or("unknown metric")?;
+    let mut corrections = Vec::new();
 
-    let freq = match freq_val {
-        "annual" => Frequency::Annual,
-        "quarterly" => Frequency::Quarterly,
-        _ => return Err("freq must be annual or quarterly".into()),
-    };
+    let (metric, metric_corrected) =
+        normalize_metric_value(statement_type, metric_val).map_err(|_| {
+            format!(
+                "unknown metric '{}'; try one of the slash choices for this statement",
+                metric_val
+            )
+        })?;
+    if metric_corrected {
+        corrections.push(format!("metric→{}", metric.slash_value));
+    }
 
-    if freq == Frequency::Annual && quarter.is_some() {
-        return Err("quarter can only be used with quarterly frequency".into());
+    let (freq, freq_corrected) = normalize_freq(freq_val);
+    if freq_corrected {
+        corrections.push(format!("freq→{}", match freq { Frequency::Annual => "annual", Frequency::Quarterly => "quarterly", }));
     }
 
     let quarter_num = quarter.and_then(|q| match q {
@@ -195,6 +249,15 @@ pub async fn handle_text(
         "Q4" => Some(4),
         _ => None,
     });
+    let quarter_num = match freq {
+        Frequency::Annual => {
+            if quarter.is_some() {
+                corrections.push("ignored quarter for annual freq".to_string());
+            }
+            None
+        }
+        Frequency::Quarterly => quarter_num,
+    };
 
     let years_back = year
         .map(|y| {
@@ -237,7 +300,11 @@ pub async fn handle_text(
         display
     );
 
-    Ok(response)
+    if corrections.is_empty() {
+        Ok(response)
+    } else {
+        Ok(format!("{} (adjusted: {})", response, corrections.join(", ")))
+    }
 }
 
 fn select_metric(

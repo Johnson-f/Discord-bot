@@ -5,13 +5,14 @@ use chrono::{Datelike, Duration, Timelike, Utc, Weekday};
 use chrono_tz::America;
 use chrono_tz::America::New_York;
 use once_cell::sync::Lazy;
-use serenity::all::{CreateMessage, Http};
+use serenity::all::{CreateAttachment, CreateMessage, Http};
 use serenity::model::prelude::ChannelId;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
 use crate::service::finance::FinanceService;
+use super::weekly_report;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -149,14 +150,15 @@ pub async fn send_daily_report(
         return Ok(());
     }
 
-    let mut lines = Vec::new();
-    lines.push(format!(
+    let heading = format!(
         "📅 Earnings ({}) — BMO & AMC with implied move from nearest expiry",
         date_label
-    ));
+    );
+    let mut lines = Vec::new();
+    lines.push(heading.clone());
     lines.push(String::new());
 
-    for ev in events {
+    for ev in &events {
         let session = classify_session(ev.time_of_day.as_deref());
         let iv_snapshot =
             fetch_iv_snapshot(finance, &ev.symbol, ev.date.date_naive(), session).await;
@@ -176,13 +178,33 @@ pub async fn send_daily_report(
         }
     }
 
-    let content = lines.join("\n");
-    info!("Posting daily earnings report with {} lines", lines.len());
-
-    channel_id
-        .send_message(http, CreateMessage::new().content(content))
-        .await
-        .map_err(|e| format!("failed to post daily earnings report: {e}"))?;
+    // Try to render image (reuse weekly renderer); fall back to text
+    match weekly_report::render_calendar_image(&events).await {
+        Ok(bytes) => {
+            let attachment = CreateAttachment::bytes(bytes, "earnings-daily.png");
+            info!(
+                "Posting daily earnings report (image) with {} lines of backup text",
+                lines.len()
+            );
+            channel_id
+                .send_files(
+                    http,
+                    vec![attachment],
+                    CreateMessage::new().content(heading),
+                )
+                .await
+                .map_err(|e| format!("failed to post daily earnings image: {e}"))?;
+        }
+        Err(err) => {
+            warn!("Daily earnings image render failed, falling back to text: {err}");
+            let content = lines.join("\n");
+            info!("Posting daily earnings report (text) with {} lines", lines.len());
+            channel_id
+                .send_message(http, CreateMessage::new().content(content))
+                .await
+                .map_err(|e| format!("failed to post daily earnings report: {e}"))?;
+        }
+    }
 
     Ok(())
 }
