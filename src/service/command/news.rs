@@ -34,7 +34,14 @@ pub async fn handle(
 ) -> Result<String, String> {
     let ticker = get_str_opt(command, "ticker").ok_or("ticker is required")?;
     let limit = get_int_opt(command, "limit").unwrap_or(1).clamp(1, 10) as usize;
+    handle_text(finance, ticker, limit).await
+}
 
+pub async fn handle_text(
+    finance: &FinanceService,
+    ticker: &str,
+    limit: usize,
+) -> Result<String, String> {
     let news = finance
         .get_news(ticker, limit)
         .await

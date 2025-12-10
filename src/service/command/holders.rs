@@ -46,13 +46,24 @@ pub async fn handle(
     finance: &FinanceService,
 ) -> Result<String, String> {
     let ticker = get_str_opt(command, "ticker").ok_or("ticker is required")?;
-    let holder_type = match get_str_opt(command, "type") {
-        Some("major") => HolderType::Major,
-        Some("institutional") => HolderType::Institutional,
-        Some("mutualfund") => HolderType::MutualFund,
-        Some("insider_transactions") => HolderType::InsiderTransactions,
-        Some("insider_purchases") => HolderType::InsiderPurchases,
-        Some("insider_roster") => HolderType::InsiderRoster,
+    let holder_type_raw = get_str_opt(command, "type").ok_or("type is required")?;
+    let limit = get_int_opt(command, "limit").map(|v| v as usize);
+    handle_text(finance, ticker, holder_type_raw, limit).await
+}
+
+pub async fn handle_text(
+    finance: &FinanceService,
+    ticker: &str,
+    holder_type_raw: &str,
+    limit: Option<usize>,
+) -> Result<String, String> {
+    let holder_type = match holder_type_raw {
+        "major" => HolderType::Major,
+        "institutional" => HolderType::Institutional,
+        "mutualfund" => HolderType::MutualFund,
+        "insider_transactions" => HolderType::InsiderTransactions,
+        "insider_purchases" => HolderType::InsiderPurchases,
+        "insider_roster" => HolderType::InsiderRoster,
         _ => {
             return Err(
                 "type must be major | institutional | mutualfund | insider_transactions | insider_purchases | insider_roster"
@@ -60,7 +71,7 @@ pub async fn handle(
             )
         }
     };
-    let limit = get_int_opt(command, "limit").unwrap_or(5).clamp(1, 10) as usize;
+    let limit = limit.unwrap_or(5).clamp(1, 10) as usize;
 
     let data = finance
         .get_holders(ticker, holder_type)
@@ -101,18 +112,16 @@ fn format_major(data: &crate::models::HoldersOverview) -> Option<String> {
     let breakdown = data.major_breakdown.as_ref()?;
     let mut parts = Vec::new();
     for (k, v) in breakdown.breakdown_data.iter() {
-        let value = if let Some(f) = v.get("raw").and_then(|r| r.as_f64()) {
-            format!("{:.2}", f)
-        } else if let Some(i) = v.get("raw").and_then(|r| r.as_i64()) {
-            i.to_string()
-        } else if let Some(f) = v.as_f64() {
-            format!("{:.2}", f)
-        } else if let Some(i) = v.as_i64() {
-            i.to_string()
-        } else {
-            continue;
-        };
-        parts.push(format!("{}: {}", k, value));
+        let numeric = v
+            .get("raw")
+            .and_then(|r| r.as_f64())
+            .or_else(|| v.get("raw").and_then(|r| r.as_i64()).map(|i| i as f64))
+            .or_else(|| v.as_f64())
+            .or_else(|| v.as_i64().map(|i| i as f64));
+
+        if let Some(num) = numeric {
+            parts.push(format!("{}: {}", k, format_percent(num)));
+        }
     }
 
     if parts.is_empty() {
@@ -143,9 +152,9 @@ where
         lines.push(format!(
             "{} — shares: {}, %out: {}, reported: {}",
             row.name(),
-            format_shares_m(row.shares()),
+            format_shares(row.shares()),
             row.percent_out()
-                .map(|p| format!("{:.2}%", p))
+                .map(format_percent)
                 .unwrap_or_else(|| "n/a".to_string()),
             row.date_reported()
         ));
@@ -215,11 +224,33 @@ fn get_int_opt(command: &CommandInteraction, name: &str) -> Option<i64> {
         })
 }
 
-fn format_shares_m(shares: i64) -> String {
-    if shares.abs() >= 1_000_000 {
+fn format_percent(value: f64) -> String {
+    let pct = if value.abs() <= 1.0 {
+        value * 100.0
+    } else {
+        value
+    };
+    format!("{:.2}%", pct)
+}
+
+fn format_shares(shares: i64) -> String {
+    if shares.abs() >= 1_000_000_000 {
+        format!("{:.2}B", shares as f64 / 1_000_000_000.0)
+    } else if shares.abs() >= 1_000_000 {
         format!("{:.2}M", shares as f64 / 1_000_000.0)
     } else {
         shares.to_string()
+    }
+}
+
+fn format_currency(value: i64) -> String {
+    let abs = value.abs() as f64;
+    if abs >= 1_000_000_000.0 {
+        format!("${:.2}B", value as f64 / 1_000_000_000.0)
+    } else if abs >= 1_000_000.0 {
+        format!("${:.2}M", value as f64 / 1_000_000.0)
+    } else {
+        format!("${}", value)
     }
 }
 
@@ -240,10 +271,10 @@ fn format_transactions(
             tx.position,
             tx.transaction,
             tx.shares
-                .map(format_shares_m)
+                .map(format_shares)
                 .unwrap_or_else(|| "n/a".into()),
             tx.value
-                .map(|v| format!("${:.2}M", v as f64 / 1_000_000.0))
+                .map(format_currency)
                 .unwrap_or_else(|| "n/a".into()),
             tx.start_date.date_naive()
         ));
@@ -256,11 +287,11 @@ fn format_purchases(p: Option<&InsiderPurchase>, symbol: &str) -> Result<String,
     Ok(format!(
         "Insider purchases (recent) for {}\nBuys: {} shares in {} transactions\nSells: {} shares in {} transactions\nNet shares: {}",
         symbol,
-        p.purchases_shares.map(format_shares_m).unwrap_or_else(|| "n/a".into()),
+        p.purchases_shares.map(format_shares).unwrap_or_else(|| "n/a".into()),
         p.purchases_transactions.unwrap_or(0),
-        p.sales_shares.map(format_shares_m).unwrap_or_else(|| "n/a".into()),
+        p.sales_shares.map(format_shares).unwrap_or_else(|| "n/a".into()),
         p.sales_transactions.unwrap_or(0),
-        p.net_shares.map(format_shares_m).unwrap_or_else(|| "n/a".into()),
+        p.net_shares.map(format_shares).unwrap_or_else(|| "n/a".into()),
     ))
 }
 
@@ -286,10 +317,10 @@ fn format_roster(
                 .map(|d| d.date_naive().to_string())
                 .unwrap_or_else(|| "n/a".into()),
             row.shares_owned_directly
-                .map(format_shares_m)
+                .map(format_shares)
                 .unwrap_or_else(|| "n/a".into()),
             row.shares_owned_indirectly
-                .map(format_shares_m)
+                .map(format_shares)
                 .unwrap_or_else(|| "n/a".into()),
         ));
     }

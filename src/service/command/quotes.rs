@@ -23,7 +23,14 @@ pub async fn handle(
     finance: &FinanceService,
 ) -> Result<String, String> {
     let ticker = get_str_opt(command, "ticker").ok_or("ticker is required")?;
+    build_response(finance, ticker).await
+}
 
+pub async fn handle_text(finance: &FinanceService, ticker: &str) -> Result<String, String> {
+    build_response(finance, ticker).await
+}
+
+async fn build_response(finance: &FinanceService, ticker: &str) -> Result<String, String> {
     let quote = finance
         .get_price(ticker)
         .await

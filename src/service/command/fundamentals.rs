@@ -151,6 +151,27 @@ pub async fn handle(
         _ => return Err("unknown command".into()),
     };
 
+    handle_text(
+        finance,
+        statement_type,
+        ticker,
+        metric_val,
+        freq_val,
+        year,
+        quarter,
+    )
+    .await
+}
+
+pub async fn handle_text(
+    finance: &FinanceService,
+    statement_type: StatementType,
+    ticker: &str,
+    metric_val: &str,
+    freq_val: &str,
+    year: Option<i32>,
+    quarter: Option<&str>,
+) -> Result<String, String> {
     let metrics = get_metrics_for_statement(statement_type);
     let metric = metrics
         .iter()
@@ -198,7 +219,7 @@ pub async fn handle(
     )
     .ok_or_else(|| "no matching data for the requested filters".to_string())?;
 
-    let (date, display, raw_num) = selected;
+    let (date, display) = selected;
     let quarter_text = quarter.map(|q| format!("{q} ")).unwrap_or_default();
 
     let freq_label = match freq {
@@ -216,10 +237,6 @@ pub async fn handle(
         display
     );
 
-    if let Some(raw) = raw_num {
-        response.push_str(&format!(" (raw: {:.2})", raw));
-    }
-
     Ok(response)
 }
 
@@ -230,7 +247,7 @@ fn select_metric(
     metric: &str,
     year: Option<i32>,
     quarter: Option<u32>,
-) -> Option<(String, String, Option<f64>)> {
+) -> Option<(String, String)> {
     let freq_str = match frequency {
         Frequency::Annual => "annual",
         Frequency::Quarterly => "quarterly",
@@ -242,7 +259,7 @@ fn select_metric(
 
     let metric_map = stmt.statement.get(metric)?;
 
-    let mut best: Option<(NaiveDate, String, Option<f64>, String)> = None;
+    let mut best: Option<(NaiveDate, String, String)> = None;
 
     for (date_str, val) in metric_map {
         if let Ok(nd) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
@@ -259,38 +276,33 @@ fn select_metric(
                 }
             }
 
-            let (display, raw_num) = extract_display(val);
+            let display = extract_display(val);
 
             match &best {
-                Some((best_date, _, _, _)) if nd <= *best_date => {}
-                _ => best = Some((nd, display, raw_num, date_str.clone())),
+                Some((best_date, _, _)) if nd <= *best_date => {}
+                _ => best = Some((nd, display, date_str.clone())),
             }
         }
     }
 
-    best.map(|(_, display, raw, date)| (date, display, raw))
+    best.map(|(_, display, date)| (date, display))
 }
 
-fn extract_display(val: &serde_json::Value) -> (String, Option<f64>) {
-    let raw_num = val
+fn extract_display(val: &serde_json::Value) -> String {
+    if let Some(raw) = val
         .get("reportedValue")
         .and_then(|rv| rv.get("raw"))
         .and_then(|r| r.as_f64())
-        .or_else(|| val.get("raw").and_then(|r| r.as_f64()));
+        .or_else(|| val.get("raw").and_then(|r| r.as_f64()))
+    {
+        return format!("{:.2}B", raw / 1_000_000_000.0);
+    }
 
-    let fmt = val
-        .get("reportedValue")
+    val.get("reportedValue")
         .and_then(|rv| rv.get("fmt"))
         .and_then(|f| f.as_str())
-        .map(|s| s.to_string());
-
-    let display = fmt.unwrap_or_else(|| {
-        raw_num
-            .map(|n| format!("{n:.2}"))
-            .unwrap_or_else(|| "n/a".to_string())
-    });
-
-    (display, raw_num)
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "n/a".to_string())
 }
 
 fn get_str_opt<'a>(command: &'a CommandInteraction, name: &str) -> Option<&'a str> {

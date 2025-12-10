@@ -6,7 +6,8 @@ use anyhow::Result;
 use dotenv::dotenv;
 use serenity::all::{
     ApplicationId, Command, CreateAttachment, CreateCommand, CreateInteractionResponse,
-    CreateInteractionResponseMessage, EditAttachments, GatewayIntents, GuildId, Interaction,
+    CreateInteractionResponseMessage, CreateMessage, EditAttachments, GatewayIntents, GuildId,
+    Interaction, Message,
 };
 use serenity::{async_trait, model::gateway::Ready, prelude::*, Client};
 use tracing::info;
@@ -16,6 +17,7 @@ use discord_bot::service::automation::{earnings, options_data};
 use discord_bot::service::command::earnings as earnings_cmd;
 use discord_bot::service::command::fundamentals as fundamentals_cmd;
 use discord_bot::service::command::holders as holders_cmd;
+use discord_bot::service::command::mention as mention_cmd;
 use discord_bot::service::command::news as news_cmd;
 use discord_bot::service::command::quotes as quotes_cmd;
 use discord_bot::service::finance::FinanceService;
@@ -309,6 +311,39 @@ impl EventHandler for Handler {
             }
         }
     }
+
+    async fn message(&self, ctx: Context, msg: Message) {
+        if msg.author.bot {
+            return;
+        }
+
+        let bot_id = ctx.cache.current_user().id;
+        let prefixes = [format!("<@{}>", bot_id), format!("<@!{}>", bot_id)];
+
+        let content = msg.content.trim();
+        let rest = match prefixes.iter().find_map(|p| content.strip_prefix(p)) {
+            Some(r) => r.trim(),
+            None => return, // ignore messages that don't start with a mention of the bot
+        };
+
+        if rest.is_empty() {
+            let _ = msg.reply(&ctx.http, mention_cmd::help_text()).await;
+            return;
+        }
+
+        match mention_cmd::handle(rest, &ctx.http, msg.channel_id, &self.finance).await {
+            Ok(resp) => {
+                let mut builder = CreateMessage::new().content(resp.content);
+                if let Some(attachment) = resp.attachment {
+                    builder = builder.add_file(attachment);
+                }
+                let _ = msg.channel_id.send_message(&ctx.http, builder).await;
+            }
+            Err(err) => {
+                let _ = msg.reply(&ctx.http, format!("❌ {}", err)).await;
+            }
+        }
+    }
 }
 
 // Helper function to register all global commands
@@ -352,7 +387,10 @@ async fn main() -> Result<()> {
     let app_id_raw: u64 = env::var("APPLICATION_ID")?.parse()?;
     let app_id: ApplicationId = app_id_raw.into();
 
-    let intents = GatewayIntents::empty();
+    let intents = GatewayIntents::GUILDS
+        | GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::DIRECT_MESSAGES
+        | GatewayIntents::MESSAGE_CONTENT;
 
     info!("Initializing FinanceService...");
     let finance = Arc::new(FinanceService::new(None)?);

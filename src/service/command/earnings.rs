@@ -1,6 +1,6 @@
 use chrono::{Datelike, Duration, Utc, Weekday};
 use chrono_tz::America::New_York;
-use serenity::all::{CommandInteraction, CreateCommand, Http};
+use serenity::all::{ChannelId, CommandInteraction, CreateCommand, Http};
 use std::time::Duration as StdDuration;
 use tokio::time::timeout;
 use tracing::{error, info, warn};
@@ -47,6 +47,10 @@ pub async fn handle_weekly(
     _command: &CommandInteraction,
     finance: &FinanceService,
 ) -> Result<EarningsResponse, String> {
+    handle_weekly_plain(finance).await
+}
+
+pub async fn handle_weekly_plain(finance: &FinanceService) -> Result<EarningsResponse, String> {
     info!("Starting earnings command handler");
 
     // Compute the Monday–Friday range for the relevant week:
@@ -139,8 +143,7 @@ pub async fn handle_daily(
     finance: &FinanceService,
     http: &Http,
 ) -> Result<String, String> {
-    earnings::send_daily_report(http, finance, command.channel_id).await?;
-    Ok("Posted today's earnings report to this channel.".to_string())
+    handle_daily_for_channel(finance, http, command.channel_id).await
 }
 
 /// Manually trigger the post-earnings report for today.
@@ -152,7 +155,24 @@ pub async fn handle_after_daily(
     finance: &FinanceService,
     http: &Http,
 ) -> Result<String, String> {
-    earnings::send_after_daily_report(http, finance, command.channel_id).await?;
+    handle_after_daily_for_channel(finance, http, command.channel_id).await
+}
+
+pub async fn handle_daily_for_channel(
+    finance: &FinanceService,
+    http: &Http,
+    channel_id: ChannelId,
+) -> Result<String, String> {
+    earnings::send_daily_report(http, finance, channel_id).await?;
+    Ok("Posted today's earnings report to this channel.".to_string())
+}
+
+pub async fn handle_after_daily_for_channel(
+    finance: &FinanceService,
+    http: &Http,
+    channel_id: ChannelId,
+) -> Result<String, String> {
+    earnings::send_after_daily_report(http, finance, channel_id).await?;
     Ok("Posted today's post-earnings report to this channel.".to_string())
 }
 

@@ -4,8 +4,6 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use ab_glyph::{FontArc, PxScale};
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
 use chrono::{Datelike, NaiveDate, Timelike, Utc, Weekday};
 use chrono_tz::America::New_York;
 use font_kit::family_name::FamilyName;
@@ -186,8 +184,8 @@ pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, 
 
     let font = load_font()?;
 
-    // Extract and decode logos from events
-    let logos = extract_logos_from_events(events)?;
+    // Fetch logos from URLs provided by API
+    let logos = fetch_logos_from_urls(events).await;
 
     let image = DynamicImage::ImageRgba8(draw_canvas(&columns, &font, &logos));
     let mut buffer = Vec::new();
@@ -198,35 +196,83 @@ pub async fn render_calendar_image(events: &[EarningsEvent]) -> Result<Vec<u8>, 
     Ok(buffer)
 }
 
-fn extract_logos_from_events(
+/// Fetch logos from URLs (replaces base64 decoding)
+async fn fetch_logos_from_urls(
     events: &[EarningsEvent],
-) -> Result<std::collections::HashMap<String, RgbaImage>, String> {
+) -> std::collections::HashMap<String, RgbaImage> {
     use std::collections::HashMap;
 
     let mut logos = HashMap::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .unwrap_or_default();
 
+    // Collect unique logo URLs
+    let mut logo_urls: HashMap<String, String> = HashMap::new();
     for event in events {
-        if let Some(ref logo_data) = event.logo {
-            if let Some(base64_data) = logo_data.strip_prefix("data:image/png;base64,") {
-                match STANDARD.decode(base64_data) {
-                    Ok(decoded) => match image::load_from_memory(&decoded) {
-                        Ok(img) => {
-                            logos.insert(event.symbol.clone(), fit_logo(&img));
-                        }
-                        Err(e) => {
-                            warn!("Failed to load logo for {}: {}", event.symbol, e);
-                        }
-                    },
-                    Err(e) => {
-                        warn!("Failed to decode base64 logo for {}: {}", event.symbol, e);
-                    }
-                }
+        if let Some(ref logo_url) = event.logo {
+            // Only fetch if it's a valid URL (not base64 data)
+            if logo_url.starts_with("http://") || logo_url.starts_with("https://") {
+                logo_urls.insert(event.symbol.clone(), logo_url.clone());
             }
         }
     }
 
-    info!("Loaded {} logos from API", logos.len());
-    Ok(logos)
+    info!("Fetching {} logos from URLs...", logo_urls.len());
+
+    // Fetch logos in parallel with limited concurrency
+    let mut tasks = Vec::new();
+    for (symbol, url) in logo_urls {
+        let client = client.clone();
+        let symbol = symbol.clone();
+        let url = url.clone();
+        
+        tasks.push(tokio::spawn(async move {
+            match fetch_single_logo(&client, &url).await {
+                Ok(logo) => Some((symbol, logo)),
+                Err(e) => {
+                    warn!("Failed to fetch logo for {} from {}: {}", symbol, url, e);
+                    None
+                }
+            }
+        }));
+    }
+
+    // Wait for all tasks and collect results
+    for task in tasks {
+        if let Ok(Some((symbol, logo))) = task.await {
+            logos.insert(symbol, logo);
+        }
+    }
+
+    info!("Successfully loaded {} logos from URLs", logos.len());
+    logos
+}
+
+async fn fetch_single_logo(
+    client: &reqwest::Client,
+    url: &str,
+) -> Result<RgbaImage, String> {
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("failed to read bytes: {}", e))?;
+
+    let img = image::load_from_memory(&bytes)
+        .map_err(|e| format!("failed to decode image: {}", e))?;
+
+    Ok(fit_logo(&img))
 }
 
 fn load_font() -> Result<FontArc, String> {
