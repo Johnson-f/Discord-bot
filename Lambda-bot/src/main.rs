@@ -1,4 +1,6 @@
 mod automation;
+mod finance;
+mod models;
 
 use automation::test;
 use serenity::all::{

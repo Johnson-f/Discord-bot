@@ -11,6 +11,8 @@ dependencies = [
  "finance-query-core",
  "futures-util",
  "serenity",
+ "stacks-bot",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "tracing-subscriber",

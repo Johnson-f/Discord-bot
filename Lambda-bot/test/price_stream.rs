@@ -1,4 +1,4 @@
-use lambda_bot::finance::price::PriceService;
+use Lambda_bot::finance::price::PriceService;
 use futures_util::StreamExt;
 use std::time::Duration;
 use tokio::time::timeout;
